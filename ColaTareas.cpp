@@ -10,22 +10,22 @@ ColaTareas::ColaTareas() {
 // Destructor: libera la memoria de los nodos
 ColaTareas::~ColaTareas() {
     while (frenteNodo != nullptr) {
-        Nodo* temp = frenteNodo;
-        frenteNodo = frenteNodo->siguiente;
+        NodoTarea* temp = frenteNodo;
+        frenteNodo = frenteNodo->getSiguiente();
         delete temp;
     }
 }
 
 // Agrega una tarea al final de la cola
 void ColaTareas::encolar(Tarea* tarea) {
-    Nodo* nuevo = new Nodo(tarea);
+    NodoTarea* nuevo = new NodoTarea(tarea);
     if (estaVacia()) {
         // Si la cola está vacía, el nuevo nodo es frente y final
         frenteNodo = nuevo;
         finalNodo = nuevo;
     } else {
         // Si no, se enlaza al final y se actualiza el final
-        finalNodo->siguiente = nuevo;
+        finalNodo->setSiguiente(nuevo);
         finalNodo = nuevo;
     }
     cantidad++;
@@ -37,8 +37,8 @@ void ColaTareas::desencolar() {
         // No hacer nada si la cola está vacía
         return;
     }
-    Nodo* temp = frenteNodo;
-    frenteNodo = frenteNodo->siguiente;
+    NodoTarea* temp = frenteNodo;
+    frenteNodo = frenteNodo->getSiguiente();
     delete temp;
     cantidad--;
     // Si la cola quedó vacía, el final también debe ser nullptr
@@ -53,7 +53,7 @@ Tarea* ColaTareas::frente() {
         // Devuelve nullptr si la cola está vacía
         return nullptr;
     }
-    return frenteNodo->tarea;
+    return frenteNodo->getTarea();
 }
 
 // Indica si la cola está vacía

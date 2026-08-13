@@ -2,6 +2,7 @@
 #define COLAPRIORIDAD_H
 
 #include "Tarea.h"
+#include "NodoTarea.h"
 
 using namespace std;
 
@@ -11,15 +12,8 @@ using namespace std;
  */
 class ColaPrioridad {
 private:
-    // Nodo interno de la cola
-    struct Nodo {
-        Tarea* tarea;   // Puntero a la tarea
-        Nodo* siguiente; // Puntero al siguiente nodo
-        Nodo(Tarea* tarea) : tarea(tarea), siguiente(nullptr) {}
-    };
-
-    Nodo* frenteNodo; // Nodo al frente de la cola (mayor prioridad)
-    int cantidad;     // Cantidad de elementos en la cola
+    NodoTarea* frenteNodo; // Nodo al frente de la cola (mayor prioridad)
+    int cantidad;          // Cantidad de elementos en la cola
 
     // Devuelve el valor numérico de la prioridad (ALTA=0, MEDIA=1, BAJA=2)
     int prioridadValor(const string& prioridad) const;

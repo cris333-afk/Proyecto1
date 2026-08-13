@@ -9,8 +9,8 @@ ColaPrioridad::ColaPrioridad() {
 // Destructor: libera la memoria de los nodos
 ColaPrioridad::~ColaPrioridad() {
     while (frenteNodo != nullptr) {
-        Nodo* temp = frenteNodo;
-        frenteNodo = frenteNodo->siguiente;
+        NodoTarea* temp = frenteNodo;
+        frenteNodo = frenteNodo->getSiguiente();
         delete temp;
     }
 }
@@ -27,22 +27,22 @@ int ColaPrioridad::prioridadValor(const string& prioridad) const {
 
 // Inserta una tarea ordenada por prioridad
 void ColaPrioridad::encolar(Tarea* tarea) {
-    Nodo* nuevo = new Nodo(tarea);
+    NodoTarea* nuevo = new NodoTarea(tarea);
     int valorNuevo = prioridadValor(tarea->getPrioridad());
 
     // Si la cola está vacía o la nueva tarea tiene mayor prioridad que el frente
-    if (estaVacia() || valorNuevo < prioridadValor(frenteNodo->tarea->getPrioridad())) {
-        nuevo->siguiente = frenteNodo;
+    if (estaVacia() || valorNuevo < prioridadValor(frenteNodo->getTarea()->getPrioridad())) {
+        nuevo->setSiguiente(frenteNodo);
         frenteNodo = nuevo;
     } else {
         // Recorre la cola para encontrar la posición correcta
-        Nodo* actual = frenteNodo;
-        while (actual->siguiente != nullptr &&
-               valorNuevo >= prioridadValor(actual->siguiente->tarea->getPrioridad())) {
-            actual = actual->siguiente;
+        NodoTarea* actual = frenteNodo;
+        while (actual->getSiguiente() != nullptr &&
+               valorNuevo >= prioridadValor(actual->getSiguiente()->getTarea()->getPrioridad())) {
+            actual = actual->getSiguiente();
         }
-        nuevo->siguiente = actual->siguiente;
-        actual->siguiente = nuevo;
+        nuevo->setSiguiente(actual->getSiguiente());
+        actual->setSiguiente(nuevo);
     }
     cantidad++;
 }
@@ -53,8 +53,8 @@ void ColaPrioridad::desencolar() {
         // No hacer nada si la cola está vacía
         return;
     }
-    Nodo* temp = frenteNodo;
-    frenteNodo = frenteNodo->siguiente;
+    NodoTarea* temp = frenteNodo;
+    frenteNodo = frenteNodo->getSiguiente();
     delete temp;
     cantidad--;
 }
@@ -65,7 +65,7 @@ Tarea* ColaPrioridad::frente() {
         // Devuelve nullptr si la cola está vacía
         return nullptr;
     }
-    return frenteNodo->tarea;
+    return frenteNodo->getTarea();
 }
 
 // Indica si la cola está vacía

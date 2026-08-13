@@ -2,6 +2,7 @@
 #define COLATAREAS_H
 
 #include "Tarea.h"
+#include "NodoTarea.h"
 
 using namespace std;
 
@@ -10,16 +11,9 @@ using namespace std;
  */
 class ColaTareas {
 private:
-    // Nodo interno de la cola
-    struct Nodo {
-        Tarea* tarea;   // Puntero a la tarea
-        Nodo* siguiente; // Puntero al siguiente nodo
-        Nodo(Tarea* tarea) : tarea(tarea), siguiente(nullptr) {}
-    };
-
-    Nodo* frenteNodo; // Nodo al frente de la cola
-    Nodo* finalNodo;  // Nodo al final de la cola
-    int cantidad;     // Cantidad de elementos en la cola
+    NodoTarea* frenteNodo; // Nodo al frente de la cola
+    NodoTarea* finalNodo;  // Nodo al final de la cola
+    int cantidad;          // Cantidad de elementos en la cola
 
 public:
     // Constructor

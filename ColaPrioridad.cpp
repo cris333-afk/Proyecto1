@@ -6,7 +6,12 @@ ColaPrioridad::ColaPrioridad() {
     cantidad = 0;
 }
 
-// Destructor: libera la memoria de los nodos
+// Destructor: libera la memoria de los NodoTarea.
+// NOTA (ownership): este destructor hace delete SOLO de los nodos
+// (delete temp, donde temp es un NodoTarea). NO hace delete de las Tarea
+// que esos nodos apuntan: las Tarea son propiedad de quien las creó con new
+// (normalmente ArbolSubtareas) y se liberan por separado. Esto es consistente
+// con NodoTarea, que guarda una referencia prestada y no es su propietario.
 ColaPrioridad::~ColaPrioridad() {
     while (frenteNodo != nullptr) {
         NodoTarea* temp = frenteNodo;

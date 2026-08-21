@@ -1,5 +1,7 @@
 #pragma once
 #include <stack>
+#include <string>
+#include <cstddef>
 #include "Accion.h"
 
 // Administra dos pilas de acciones para permitir deshacer y rehacer.
@@ -11,6 +13,10 @@ private:
 
     // Acciones disponibles para rehacer.
     std::stack<Accion> pilaRehacer;
+
+    // Muestra las acciones de una pila recorriendo una copia temporal.
+    // La copia se crea al pasar la pila por valor.
+    void mostrarPila(std::stack<Accion> pila, const std::string& titulo) const;
 
 public:
     // Constructor por defecto.
@@ -50,4 +56,8 @@ public:
 
     // Vacía ambas pilas por completo.
     void limpiar();
+
+    // Muestra las acciones almacenadas en ambas pilas.
+    // No modifica las pilas originales.
+    void mostrarHistorial() const;
 };

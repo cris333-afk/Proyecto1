@@ -1,24 +1,4 @@
 #include "PilaHistorial.h"
-#include <iostream>
-
-// Convierte TipoAccion a texto legible.
-static std::string tipoAccionToString(TipoAccion tipo) {
-    switch (tipo) {
-        case TipoAccion::AGREGAR: return "AGREGAR";
-        case TipoAccion::ACTUALIZAR: return "ACTUALIZAR";
-        case TipoAccion::ELIMINAR: return "ELIMINAR";
-    }
-    return "DESCONOCIDO";
-}
-
-// Convierte TipoEntidad a texto legible.
-static std::string tipoEntidadToString(TipoEntidad tipo) {
-    switch (tipo) {
-        case TipoEntidad::USUARIO: return "USUARIO";
-        case TipoEntidad::TAREA: return "TAREA";
-    }
-    return "DESCONOCIDO";
-}
 
 // Constructor por defecto.
 PilaHistorial::PilaHistorial() {}
@@ -107,35 +87,35 @@ void PilaHistorial::limpiar() {
 
 // Muestra las acciones de una pila recorriendo una copia temporal.
 // La copia se crea al pasar la pila por valor.
-void PilaHistorial::mostrarPila(std::stack<Accion> pila, const std::string& titulo) const {
-    std::cout << "--- " << titulo << " ---" << std::endl;
+std::string PilaHistorial::mostrarPila(std::stack<Accion> pila, const std::string& titulo) const {
+    std::string texto = "--- " + titulo + " ---\n";
 
     if (pila.empty()) {
-        std::cout << "Vacía" << std::endl;
-        return;
+        texto += "Vacia\n";
+        return texto;
     }
 
     while (!pila.empty()) {
         Accion accion = pila.top();
         pila.pop();
 
-        std::cout << "Acción:" << std::endl;
-        std::cout << "Tipo: " << tipoAccionToString(accion.getTipoAccion()) << std::endl;
-        std::cout << "Entidad: " << tipoEntidadToString(accion.getTipoEntidad()) << std::endl;
-        std::cout << "ID: " << accion.getIdEntidad() << std::endl;
-        std::cout << "Estado anterior: " << accion.getEstadoAnterior() << std::endl;
-        std::cout << "Estado posterior: " << accion.getEstadoPosterior() << std::endl;
-        std::cout << std::endl;
+        texto += "Accion:\n";
+        texto += accion.toString();
+        texto += "\n";
     }
+
+    return texto;
 }
 
 // Muestra las acciones almacenadas en ambas pilas.
 // Recorre copias temporales para no modificar las pilas originales.
-void PilaHistorial::mostrarHistorial() const {
-    std::cout << "================ HISTORIAL ================" << std::endl;
+std::string PilaHistorial::mostrarHistorial() const {
+    std::string texto = "================ HISTORIAL ================\n";
 
-    mostrarPila(pilaDeshacer, "ACCIONES PARA DESHACER");
-    mostrarPila(pilaRehacer, "ACCIONES PARA REHACER");
+    texto += mostrarPila(pilaDeshacer, "ACCIONES PARA DESHACER");
+    texto += mostrarPila(pilaRehacer, "ACCIONES PARA REHACER");
 
-    std::cout << "============================================" << std::endl;
+    texto += "============================================\n";
+
+    return texto;
 }

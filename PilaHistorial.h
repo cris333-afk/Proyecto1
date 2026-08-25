@@ -16,7 +16,7 @@ private:
 
     // Muestra las acciones de una pila recorriendo una copia temporal.
     // La copia se crea al pasar la pila por valor.
-    void mostrarPila(std::stack<Accion> pila, const std::string& titulo) const;
+    std::string mostrarPila(std::stack<Accion> pila, const std::string& titulo) const;
 
 public:
     // Constructor por defecto.
@@ -59,5 +59,5 @@ public:
 
     // Muestra las acciones almacenadas en ambas pilas.
     // No modifica las pilas originales.
-    void mostrarHistorial() const;
+    std::string mostrarHistorial() const;
 };

@@ -28,6 +28,9 @@ private:
     // Identifica qué entidad se modificó.
     int idEntidad;
 
+    // Identifica al usuario que realizó la operación.
+    int idUsuario;
+
     // Se guarda para restaurar la información al deshacer.
     std::string estadoAnterior;
 
@@ -41,12 +44,16 @@ public:
 
     // Inicializa todos los datos de la acción.
     Accion(TipoAccion tipoAccion, TipoEntidad tipoEntidad, int idEntidad,
-           std::string estadoAnterior, std::string estadoPosterior);
+           int idUsuario, std::string estadoAnterior, std::string estadoPosterior);
 
     // Getters: permiten consultar la información de la acción.
     TipoAccion getTipoAccion() const;
     TipoEntidad getTipoEntidad() const;
     int getIdEntidad() const;
+    int getIdUsuario() const;
     std::string getEstadoAnterior() const;
     std::string getEstadoPosterior() const;
+
+    // Convierte los datos de la acción a texto legible.
+    std::string toString() const;
 };

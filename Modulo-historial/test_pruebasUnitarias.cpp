@@ -45,7 +45,7 @@ string tipoEntidadTexto(TipoEntidad tipo) {
 
 // Solicita los datos de una Accion al usuario.
 Accion solicitarAccion() {
-    int opcionAccion, opcionEntidad, id;
+    int opcionAccion, opcionEntidad, id, idUsuario;
     string estadoAnterior, estadoPosterior;
 
     cout << "Tipo de accion (1=AGREGAR, 2=ACTUALIZAR, 3=ELIMINAR): ";
@@ -54,6 +54,8 @@ Accion solicitarAccion() {
     cin >> opcionEntidad;
     cout << "ID de entidad: ";
     cin >> id;
+    cout << "ID del usuario que realizo la operacion: ";
+    cin >> idUsuario;
     cout << "Estado anterior: ";
     cin.ignore();
     getline(cin, estadoAnterior);
@@ -63,6 +65,7 @@ Accion solicitarAccion() {
     return Accion(opcionATipoAccion(opcionAccion),
                   opcionATipoEntidad(opcionEntidad),
                   id,
+                  idUsuario,
                   estadoAnterior,
                   estadoPosterior);
 }
@@ -72,6 +75,7 @@ void mostrarAccion(const Accion& accion) {
     cout << "Tipo: " << tipoAccionTexto(accion.getTipoAccion()) << endl;
     cout << "Entidad: " << tipoEntidadTexto(accion.getTipoEntidad()) << endl;
     cout << "ID: " << accion.getIdEntidad() << endl;
+    cout << "ID usuario: " << accion.getIdUsuario() << endl;
     cout << "Estado anterior: " << accion.getEstadoAnterior() << endl;
     cout << "Estado posterior: " << accion.getEstadoPosterior() << endl;
 }
@@ -249,8 +253,8 @@ void probarLimpiar() {
     PilaHistorial historial;
 
     // Registrar dos acciones.
-    Accion accion1(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 1, "ant1", "post1");
-    Accion accion2(TipoAccion::ACTUALIZAR, TipoEntidad::TAREA, 2, "ant2", "post2");
+    Accion accion1(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 1, 1, "ant1", "post1");
+    Accion accion2(TipoAccion::ACTUALIZAR, TipoEntidad::TAREA, 2, 1, "ant2", "post2");
     historial.registrarAccion(accion1);
     historial.registrarAccion(accion2);
 
@@ -277,9 +281,9 @@ void probarReglaNuevaAccion() {
 
     PilaHistorial historial;
 
-    Accion accionA(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 1, "antA", "postA");
-    Accion accionB(TipoAccion::ACTUALIZAR, TipoEntidad::TAREA, 2, "antB", "postB");
-    Accion accionC(TipoAccion::ELIMINAR, TipoEntidad::USUARIO, 3, "antC", "postC");
+    Accion accionA(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 1, 1, "antA", "postA");
+    Accion accionB(TipoAccion::ACTUALIZAR, TipoEntidad::TAREA, 2, 1, "antB", "postB");
+    Accion accionC(TipoAccion::ELIMINAR, TipoEntidad::USUARIO, 3, 1, "antC", "postC");
 
     historial.registrarAccion(accionA);
     historial.registrarAccion(accionB);
@@ -310,9 +314,9 @@ void probarMostrarHistorial() {
 
     PilaHistorial historial;
 
-    Accion accion1(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 10, "ID=10|Nombre=Carlos", "ID=10|Nombre=Carlos");
-    Accion accion2(TipoAccion::ACTUALIZAR, TipoEntidad::USUARIO, 10, "ID=10|Nombre=Carlos", "ID=10|Nombre=Pedro");
-    Accion accion3(TipoAccion::ELIMINAR, TipoEntidad::TAREA, 25, "ID=25|Titulo=Tarea", "ID=25|Titulo=Tarea");
+    Accion accion1(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 10, 1, "ID=10|Nombre=Carlos", "ID=10|Nombre=Carlos");
+    Accion accion2(TipoAccion::ACTUALIZAR, TipoEntidad::USUARIO, 10, 1, "ID=10|Nombre=Carlos", "ID=10|Nombre=Pedro");
+    Accion accion3(TipoAccion::ELIMINAR, TipoEntidad::TAREA, 25, 1, "ID=25|Titulo=Tarea", "ID=25|Titulo=Tarea");
 
     historial.registrarAccion(accion1);
     historial.registrarAccion(accion2);
@@ -325,7 +329,7 @@ void probarMostrarHistorial() {
     size_t deshacerAntes = historial.tamanoDeshacer();
     size_t rehacerAntes = historial.tamanoRehacer();
 
-    historial.mostrarHistorial();
+    cout << historial.mostrarHistorial();
 
     cout << "Tamano deshacer antes: " << deshacerAntes << endl;
     cout << "Tamano deshacer despues: " << historial.tamanoDeshacer() << endl;
@@ -350,16 +354,16 @@ void ejecutarTodasLasPruebas() {
     cout << (ok ? "[OK] Estado inicial" : "[ERROR] Estado inicial") << endl;
 
     // 2. Registrar accion.
-    Accion accionA(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 1, "antA", "postA");
+    Accion accionA(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 1, 1, "antA", "postA");
     historial.registrarAccion(accionA);
     ok = historial.tamanoDeshacer() == 1 && historial.tamanoRehacer() == 0;
     cout << (ok ? "[OK] Registrar accion" : "[ERROR] Registrar accion") << endl;
 
     // 3. Comportamiento LIFO.
     PilaHistorial historialLifo;
-    Accion lifoA(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 1, "a", "a");
-    Accion lifoB(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 2, "b", "b");
-    Accion lifoC(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 3, "c", "c");
+    Accion lifoA(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 1, 1, "a", "a");
+    Accion lifoB(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 2, 1, "b", "b");
+    Accion lifoC(TipoAccion::AGREGAR, TipoEntidad::USUARIO, 3, 1, "c", "c");
     historialLifo.registrarAccion(lifoA);
     historialLifo.registrarAccion(lifoB);
     historialLifo.registrarAccion(lifoC);
@@ -406,10 +410,10 @@ void ejecutarTodasLasPruebas() {
     // 8. Nueva accion elimina rehacer.
     PilaHistorial historialRegla;
     historialRegla.registrarAccion(accionA);
-    Accion accionB(TipoAccion::ACTUALIZAR, TipoEntidad::TAREA, 2, "antB", "postB");
+    Accion accionB(TipoAccion::ACTUALIZAR, TipoEntidad::TAREA, 2, 1, "antB", "postB");
     historialRegla.registrarAccion(accionB);
     historialRegla.deshacer(salida);  // Deshace B
-    Accion accionC(TipoAccion::ELIMINAR, TipoEntidad::USUARIO, 3, "antC", "postC");
+    Accion accionC(TipoAccion::ELIMINAR, TipoEntidad::USUARIO, 3, 1, "antC", "postC");
     historialRegla.registrarAccion(accionC);  // Nueva accion C
     ok = historialRegla.tamanoDeshacer() == 2 && historialRegla.tamanoRehacer() == 0;
     cout << (ok ? "[OK] Nueva accion elimina rehacer" : "[ERROR] Nueva accion elimina rehacer") << endl;
@@ -431,7 +435,7 @@ void ejecutarTodasLasPruebas() {
 
     // 12. Conservacion de estados.
     PilaHistorial historialEstados;
-    Accion accionEstados(TipoAccion::ACTUALIZAR, TipoEntidad::USUARIO, 10,
+    Accion accionEstados(TipoAccion::ACTUALIZAR, TipoEntidad::USUARIO, 10, 1,
                          "estado_anterior", "estado_posterior");
     historialEstados.registrarAccion(accionEstados);
     historialEstados.deshacer(salida);
@@ -439,7 +443,8 @@ void ejecutarTodasLasPruebas() {
          && salida.getEstadoPosterior() == "estado_posterior";
     historialEstados.rehacer(salida);
     ok = ok && salida.getEstadoAnterior() == "estado_anterior"
-         && salida.getEstadoPosterior() == "estado_posterior";
+         && salida.getEstadoPosterior() == "estado_posterior"
+         && salida.getIdUsuario() == 1;
     cout << (ok ? "[OK] Conservacion de estados" : "[ERROR] Conservacion de estados") << endl;
 
     // 13. Mostrar historial.
@@ -449,7 +454,7 @@ void ejecutarTodasLasPruebas() {
     historialMostrar.deshacer(salida);
     size_t deshacerAntes = historialMostrar.tamanoDeshacer();
     size_t rehacerAntes = historialMostrar.tamanoRehacer();
-    historialMostrar.mostrarHistorial();
+    cout << historialMostrar.mostrarHistorial();
     ok = historialMostrar.tamanoDeshacer() == deshacerAntes
          && historialMostrar.tamanoRehacer() == rehacerAntes;
     cout << (ok ? "[OK] Mostrar historial" : "[ERROR] Mostrar historial") << endl;
@@ -540,7 +545,7 @@ void demostracionInteractiva() {
                 if (confirmar == 1) {
                     size_t deshacerAntes = historial.tamanoDeshacer();
                     size_t rehacerAntes = historial.tamanoRehacer();
-                    historial.mostrarHistorial();
+                    cout << historial.mostrarHistorial();
                     cout << "Deshacer antes: " << deshacerAntes
                          << " | Deshacer despues: " << historial.tamanoDeshacer() << endl;
                     cout << "Rehacer antes: " << rehacerAntes

@@ -4,9 +4,12 @@
 #include <cstddef>
 #include "Accion.h"
 
-// Administra dos pilas de acciones para permitir deshacer y rehacer.
-// No modifica usuarios ni tareas: solo guarda y mueve acciones.
+// Administra el historial mediante dos pilas LIFO: una con las acciones disponibles
+// para deshacer y otra con las disponibles para rehacer. Su función es guardar las
+// operaciones ya realizadas y entregarlas cuando se pida revertirlas o reaplicarlas,
+// dejando en manos de quien use el módulo (por ejemplo, el Gestor) aplicar los cambios.
 class PilaHistorial {
+
 private:
     // Acciones disponibles para deshacer.
     std::stack<Accion> pilaDeshacer;
@@ -14,36 +17,35 @@ private:
     // Acciones disponibles para rehacer.
     std::stack<Accion> pilaRehacer;
 
-    // Muestra las acciones de una pila recorriendo una copia temporal.
-    // La copia se crea al pasar la pila por valor.
+    // Genera un texto con todas las acciones de una pila para mostrarlas al usuario.
+    // Recibe una copia (no la original) para que consultarla no afecte el historial real.
     std::string mostrarPila(std::stack<Accion> pila, const std::string& titulo) const;
 
 public:
+
     // Constructor por defecto.
     PilaHistorial();
 
-    // Registra una nueva acción en la pila de deshacer.
-    // Al registrar, la pila de rehacer se vacía por completo.
+    // Agrega la acción nueva a la pila de deshacer y vacía la de rehacer,
+    // porque las acciones que estaban allí pertenecían a una línea de cambios anterior.
     void registrarAccion(const Accion& accion);
 
-    // Mueve la acción de la cima de deshacer hacia rehacer.
-    // Copia la acción al parámetro y retorna true si se pudo deshacer.
+   // Mueve la acción de la cima de deshacer hacia rehacer.
     bool deshacer(Accion& accion);
 
-    // Mueve la acción de la cima de rehacer hacia deshacer.
-    // Copia la acción al parámetro y retorna true si se pudo rehacer.
+   // Mueve la acción de la cima de rehacer hacia deshacer.
     bool rehacer(Accion& accion);
 
-    // Indica si la pila de deshacer está vacía.
+    // Verifica si la pila de deshacer está vacía.
     bool estaVaciaDeshacer() const;
 
-    // Indica si la pila de rehacer está vacía.
+    // Verifica si la pila de rehacer está vacía.
     bool estaVaciaRehacer() const;
 
-    // Cantidad de acciones en la pila de deshacer.
+    // Retorna la cantidad de acciones disponibles para deshacer.
     size_t tamanoDeshacer() const;
 
-    // Cantidad de acciones en la pila de rehacer.
+    // Retorna la cantidad de acciones disponibles para rehacer.
     size_t tamanoRehacer() const;
 
     // Copia la acción de la cima de deshacer sin eliminarla.
@@ -57,7 +59,7 @@ public:
     // Vacía ambas pilas por completo.
     void limpiar();
 
-    // Muestra las acciones almacenadas en ambas pilas.
-    // No modifica las pilas originales.
+    // Permite consultar las acciones disponibles en ambas pilas(rehacer y deshacer)
+    // sin modificar su contenido.
     std::string mostrarHistorial() const;
 };

@@ -62,7 +62,9 @@ std::string Accion::getEstadoPosterior() const {
     return estadoPosterior;
 }
 
-// Convierte los datos de la acción a texto legible.
+// Une en un único string todos los campos de la acción, apoyándose en los
+// conversores de los enums. El módulo solo genera la información; mostrarla
+// en pantalla queda a cargo de quien reciba este texto (pruebas o menú).
 std::string Accion::toString() const {
     std::string texto;
     texto += "Tipo de accion: " + tipoAccionATexto(tipoAccion) + "\n";

@@ -1,0 +1,7 @@
+# Datos generados por el programa en tiempo de ejecucion (NO se suben)
+*.csv
+
+# Binarios y temporales de compilacion
+*.exe
+*.o
+*.log

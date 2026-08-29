@@ -4,73 +4,46 @@
 #include <string>
 #include <vector>
 
-/**
- * Clase GestorArchivosCSV: unica clase del sistema responsable de leer y
- * escribir los archivos .csv de usuarios, tareas y subtareas.
- *
- * Segun el UML del proyecto, este modulo es UNA sola clase: las funciones de
- * apoyo del parseo viven aqui como metodos privados, no en archivos aparte.
- * Los metodos publicos de lectura/escritura por entidad se agregaran luego
- * dentro de esta misma clase, sin crear clases auxiliares.
- *
- * Regla de robustez: ningun metodo lanza excepciones a proposito; si una linea
- * viene mal formada se devuelve un vector vacio para que el llamador muestre
- * un mensaje amigable y vuelva a intentarlo.
- */
+// GestorArchivosCSV: unica clase del sistema responsable de leer y escribir
+// los archivos .csv (usuarios, tareas, subtareas) y la bitacora de auditoria.
+// Ningun otro modulo del proyecto debe tocar archivos directamente.
 class GestorArchivosCSV {
 public:
-    // Constructor por defecto (sin recursos que inicializar por ahora).
     GestorArchivosCSV();
-
-    // Destructor por defecto (la clase no administra memoria dinamica aun).
     ~GestorArchivosCSV();
 
-    // Carga los registros de usuarios.csv y los imprime en consola (placeholder).
-    void cargarUsuarios(const std::string& ruta);
+    // Carga: devuelven cada registro valido leido (fila = campos en el
+    // orden del formato). Crean el archivo vacio si no existe. Las lineas
+    // mal formadas o con numero de campos incorrecto se omiten con un
+    // aviso, sin detener la carga del resto.
+    std::vector<std::vector<std::string>> cargarUsuarios(const std::string& ruta);
+    std::vector<std::vector<std::string>> cargarTareas(const std::string& ruta);
+    std::vector<std::vector<std::string>> cargarSubtareas(const std::string& ruta);
 
-    // Carga los registros de tareas.csv y los imprime en consola (placeholder).
-    void cargarTareas(const std::string& ruta);
+    // Guardado: sobrescribe el archivo completo con los datos recibidos.
+    // Si una fila viene incompleta, se omite con un aviso.
+    void guardarUsuarios(const std::string& ruta, const std::vector<std::vector<std::string>>& datos);
+    void guardarTareas(const std::string& ruta, const std::vector<std::vector<std::string>>& datos);
+    void guardarSubtareas(const std::string& ruta, const std::vector<std::vector<std::string>>& datos);
 
-    // Carga los registros de subtareas.csv y los imprime en consola (placeholder).
-    void cargarSubtareas(const std::string& ruta);
-
-    // Guarda los registros de usuarios en usuarios.csv, sobrescribiendo el archivo.
-    void guardarUsuarios(const std::string& ruta,
-                         const std::vector<std::vector<std::string>>& datos);
-
-    // Guarda los registros de tareas en tareas.csv, sobrescribiendo el archivo.
-    void guardarTareas(const std::string& ruta,
-                       const std::vector<std::vector<std::string>>& datos);
-
-    // Guarda los registros de subtareas en subtareas.csv, sobrescribiendo el archivo.
-    void guardarSubtareas(const std::string& ruta,
-                          const std::vector<std::vector<std::string>>& datos);
-
-    // Registra una accion de auditoria agregando una linea (siempre en modo
-    // append) a auditoria_log.csv con el formato:
-    // [Fecha y Hora] | [idUsuario] | [accion] | [idTarea].
-    void registrarAuditoria(const std::string& idUsuario,
-                            const std::string& accion,
-                            const std::string& idTarea);
+    // Auditoria: agrega una linea a auditoria_log.csv, siempre en modo
+    // append (bitacora inmutable). Formato:
+    //   [Fecha y Hora] | [idUsuario] | [accion] | [idTarea]
+    void registrarAuditoria(const std::string& idUsuario, const std::string& accion, const std::string& idTarea);
 
 private:
-    // Separa una linea CSV por comas respetando los campos entre comillas dobles
-    // (los de texto libre pueden contener comas internas que no deben partirse).
-    // Devuelve un vector vacio si la linea esta mal formada: comillas sin cerrar
-    // o una comilla a mitad de un campo que no esta entrecomillado.
+    // Parsea una linea CSV respetando campos entre comillas dobles.
+    // Devuelve un vector vacio si la linea esta mal formada.
     std::vector<std::string> parsearLinea(const std::string& linea) const;
 
-    // Envuelve un campo entre comillas dobles para escribirlo de vuelta al CSV.
-    // Las comillas internas se duplican (regla CSV "") para que parsearLinea
-    // recupere el texto original sin ambiguedad.
+    // Envuelve un campo entre comillas dobles, duplicando comillas internas.
     std::string escaparCampo(const std::string& campo) const;
 
-    // Indica si existe un archivo en la ruta indicada. No lanza excepciones:
-    // si el archivo no se puede abrir, simplemente devuelve false.
+    // true si el archivo puede abrirse para lectura.
     bool archivoExiste(const std::string& ruta) const;
 
-    // Devuelve la fecha y hora actual con formato "YYYY-MM-DD HH:MM:SS".
+    // Fecha/hora actual formateada como "YYYY-MM-DD HH:MM:SS".
     std::string obtenerFechaHoraActual() const;
 };
 
-#endif // GESTOR_ARCHIVOS_CSV_H
+#endif  // GESTOR_ARCHIVOS_CSV_H

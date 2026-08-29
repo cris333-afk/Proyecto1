@@ -110,12 +110,16 @@ bool GestorArchivosCSV::archivoExiste(const string& ruta) const {
 }
 
 /**
- * Carga los registros de usuarios.csv y los imprime en consola (placeholder).
- * Formato esperado: id,nombre,rol,password (rol ADMIN o NORMAL). Si el archivo
+ * Carga los registros de usuarios.csv y los devuelve como vector de filas,
+ * ademas de imprimirlos en consola (comprobacion).
+ * Formato esperado: id,nombre,rol,password (rol "Administrador" o "Usuario
+ * Normal", la conversion canonica de rolATexto/textoARol). Si el archivo
  * no existe se crea vacio; las lineas malformadas o con numero de campos distinto
  * del esperado se omiten mostrando el numero de linea en consola.
  */
-void GestorArchivosCSV::cargarUsuarios(const string& ruta) {
+vector<vector<string>> GestorArchivosCSV::cargarUsuarios(const string& ruta) {
+    vector<vector<string>> resultado;   // Acumula cada registro valido leido.
+
     // Si el archivo no existe, se crea vacio para continuar sin error.
     if (!archivoExiste(ruta)) {
         ofstream nuevo(ruta);
@@ -151,15 +155,22 @@ void GestorArchivosCSV::cargarUsuarios(const string& ruta) {
         // Placeholder: aqui luego se creara un objeto Usuario del companero.
         cout << "Usuario: id=" << campos[0] << ", nombre=" << campos[1]
              << ", rol=" << campos[2] << ", password=" << campos[3] << endl;
+
+        resultado.push_back(campos);   // Registro valido: se acumula para devolverlo.
     }
+
+    return resultado;
 }
 
 /**
  * Carga los registros de tareas.csv (id,prioridad,idUsuarioResponsable,
- * descripcion,estado) y los imprime en consola (placeholder). Si el archivo no
- * existe se crea vacio; las lineas malformas o de conteo incorrecto se omiten.
+ * descripcion,estado) y los devuelve como vector de filas, ademas de
+ * imprimirlos en consola (comprobacion). Si el archivo no existe se crea
+ * vacio; las lineas malformas o de conteo incorrecto se omiten.
  */
-void GestorArchivosCSV::cargarTareas(const string& ruta) {
+vector<vector<string>> GestorArchivosCSV::cargarTareas(const string& ruta) {
+    vector<vector<string>> resultado;   // Acumula cada registro valido leido.
+
     // Si el archivo no existe, se crea vacio para continuar sin error.
     if (!archivoExiste(ruta)) {
         ofstream nuevo(ruta);
@@ -197,15 +208,22 @@ void GestorArchivosCSV::cargarTareas(const string& ruta) {
         cout << "Tarea: id=" << campos[0] << ", prioridad=" << campos[1]
              << ", responsable=" << campos[2] << ", descripcion=" << campos[3]
              << ", estado=" << campos[4] << endl;
+
+        resultado.push_back(campos);   // Registro valido: se acumula para devolverlo.
     }
+
+    return resultado;
 }
 
 /**
  * Carga los registros de subtareas.csv (id,idTareaPadre,descripcion,estado) y
- * los imprime en consola (placeholder). Si el archivo no existe se crea vacio;
- * las lineas malformas o de conteo incorrecto se omiten con su numero.
+ * los devuelve como vector de filas, ademas de imprimirlos en consola
+ * (comprobacion). Si el archivo no existe se crea vacio; las lineas malformas
+ * o de conteo incorrecto se omiten con su numero.
  */
-void GestorArchivosCSV::cargarSubtareas(const string& ruta) {
+vector<vector<string>> GestorArchivosCSV::cargarSubtareas(const string& ruta) {
+    vector<vector<string>> resultado;   // Acumula cada registro valido leido.
+
     // Si el archivo no existe, se crea vacio para continuar sin error.
     if (!archivoExiste(ruta)) {
         ofstream nuevo(ruta);
@@ -241,7 +259,11 @@ void GestorArchivosCSV::cargarSubtareas(const string& ruta) {
         // Placeholder: aqui se insertara la subtarea en ArbolSubtareas.
         cout << "Subtarea: id=" << campos[0] << ", tareaPadre=" << campos[1]
              << ", descripcion=" << campos[2] << ", estado=" << campos[3] << endl;
+
+        resultado.push_back(campos);   // Registro valido: se acumula para devolverlo.
     }
+
+    return resultado;
 }
 
 /**

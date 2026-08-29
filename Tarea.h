@@ -1,0 +1,36 @@
+#ifndef TAREA_H
+#define TAREA_H
+
+#include <string>
+#include <vector>
+
+using namespace std;
+
+class Tarea {
+private:
+    int id;                    // Identificador de la tarea
+    string prioridad;          // Prioridad: ALTA, MEDIA, BAJA
+    string estado;             // Estado de la tarea
+    vector<Tarea*> subtareas;  // Lista de subtareas
+
+public:
+    // Constructor
+    Tarea(int id, const string& prioridad, const string& estado);
+
+    // Destructor
+    ~Tarea();
+
+    // Getters
+    int getId() const;
+    string getPrioridad() const;
+    string getEstado() const;
+    vector<Tarea*> getSubtareas() const;
+
+    // Setters
+    void setId(int id);
+    void setPrioridad(const string& prioridad);
+    void setEstado(const string& estado);
+    void setSubtareas(const vector<Tarea*>& subtareas);
+};
+
+#endif // TAREA_H

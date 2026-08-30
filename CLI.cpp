@@ -1,6 +1,6 @@
 #include "CLI.h"
 #include "ValidacionEntrada.h"
-#include "EntradaSegura.h"
+#include "Autenticacion.h"
 #include <iostream>
 
 using namespace std;

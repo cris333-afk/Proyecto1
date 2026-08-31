@@ -1,0 +1,13 @@
+{
+    // Configuracion de la extension "C/C++ Compile Run" (F6) para este proyecto multi-archivo.
+    // IMPORTANTE: la extension compila el archivo ACTIVO. Esta configuracion asume
+    // que F6 se usa con main.cpp abierto: los demas 15 .cpp viajan dentro de
+    // cpp-flags para que el comando final enlace el proyecto completo.
+    "c-cpp-compile-run.cpp-compiler": "g++",
+    "c-cpp-compile-run.cpp-flags": "-std=c++17 -Wall -Wextra Accion.cpp ArbolSubtareas.cpp Autenticacion.cpp CLI.cpp ColaPrioridad.cpp ColaTareas.cpp GestorArchivosCSV.cpp GestorSistema.cpp ListaUsuarios.cpp NodoTarea.cpp Ordenador.cpp PilaHistorial.cpp Tarea.cpp Usuario.cpp ValidacionEntrada.cpp",
+    // Recompila siempre: si no, solo compara fechas de main.cpp y headers y podria
+    // ejecutar un binario viejo tras editar CLI.cpp, GestorSistema.cpp, etc.
+    "c-cpp-compile-run.skip-if-compiled": false,
+    "c-cpp-compile-run.save-before-compile": true,
+    "c-cpp-compile-run.output-location": "${workspaceFolder}/output"
+}

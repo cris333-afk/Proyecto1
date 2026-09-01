@@ -1,522 +1,160 @@
-#include <iostream>   // cout/endl para mensajes al usuario (nunca crashea).
+#include <iostream>
 #include <string>
 #include <vector>
-#include <functional> // std::function para el visitante recursivo del aplanado.
+#include <functional>
+#include <sstream>
 
 #include "GestorSistema.h"
-#include "Usuario.h"     // Real: Usuario y el enum Rol.
-#include "Ordenador.h"   // Real: Bubble Sort, Merge Sort y Quick Sort del repo.
-#include "ArbolSubtareas.h"   // Real: bosque de tareas con raíz virtual (Cris).
-#include "ColaTareas.h"       // Real: cola FIFO de tareas (Cris).
-#include "ColaPrioridad.h"    // Real: cola por prioridad de tareas (Cris).
+#include "Usuario.h"
+#include "ListaUsuarios.h"
+#include "PilaHistorial.h"
+#include "ColaTareas.h"
+#include "ColaPrioridad.h"
+#include "ArbolSubtareas.h"
+#include "Ordenador.h"
+#include "GestorArchivosCSV.h"
 
 using namespace std;
 
-//
-// GestorSistema: clase fachada del modulo "Sistema e Integracion".
-// Contiene login/sesion, CRUD de usuarios y tareas, cambio de estado con
-// validacion de rol, reporte ordenado (Ordenador real), historial
-// (deshacer/rehacer) y AHORA carga real de datos al iniciar. Los modulos
-// de los companeros que aun no estan en esta rama se simulan con vectores
-// de respaldo; al integrarlos se reemplazan por las estructuras reales
-// (listaUsuarios, colaFIFO, ...).
-//
+// Comparadores para Ordenador<Tarea*>
+static bool menorPorId(Tarea* const& a, Tarea* const& b) {
+    return a->getId() < b->getId();
+}
 
-// Conversion entre el texto guardado en el CSV y el enum Rol: NO se define
-// aqui. rolATexto() y textoARol() provienen del modulo Usuarios real
-// (Usuario.h / Usuario.cpp), la misma interfaz que usara ListaUsuarios al
-// integrarse, de modo que guardarTodo() y cargarTodo() escriben y leen el
-// CSV con la codificacion canonica ("Administrador" / "Usuario Normal").
+static bool menorPorPrioridad(Tarea* const& a, Tarea* const& b) {
+    auto val = [](const string& p) {
+        if (p == "ALTA") return 0;
+        if (p == "MEDIA") return 1;
+        return 2;
+    };
+    return val(a->getPrioridad()) < val(b->getPrioridad());
+}
+
+static bool menorPorResponsable(Tarea* const& a, Tarea* const& b) {
+    return a->getIdUsuarioResponsable() < b->getIdUsuarioResponsable();
+}
 
 // ---------------------------------------------------------------------
-// Constructor: instancia los modulos REALES ya integrados (las tres
-// estructuras de tareas -ArbolSubtareas, ColaTareas y ColaPrioridad- y la
-// persistencia) y deja en nullptr los punteros a los modulos que aun no
-// entregan los companeros (ListaUsuarios y PilaHistorial): para esos,
-// todavia solo existen sus declaraciones adelantadas (tipos incompletos) y
-// C++ no permite hacer new de un tipo cuyo tamano no se conoce. Al final
-// llama a cargarTodo() para reconstruir el estado desde los CSV (o sembrar
-// datos de ejemplo si es la primera ejecucion).
+// Constructor / Destructor
 // ---------------------------------------------------------------------
 GestorSistema::GestorSistema()
-    : listaUsuarios(nullptr),             // Pendiente: ListaUsuarios (Cesar).
-      historial(nullptr),                 // Pendiente: PilaHistorial (modulo historial).
-      colaFIFO(new ColaTareas()),         // Real: ColaTareas (Cris).
-      colaPrioridad(new ColaPrioridad()), // Real: ColaPrioridad (Cris).
-      arbolTareas(new ArbolSubtareas()),  // Real: ArbolSubtareas (Cris).
+    : listaUsuarios(new ListaUsuarios()),
+      historial(new PilaHistorial()),
+      colaFIFO(new ColaTareas()),
+      colaPrioridad(new ColaPrioridad()),
+      arbolTareas(new ArbolSubtareas()),
       persistencia(new GestorArchivosCSV()),
       usuarioActual(nullptr) {
     cargarTodo();
 }
 
+GestorSistema::~GestorSistema() {
+    delete colaFIFO;
+    delete colaPrioridad;
+    delete arbolTareas;
+    delete listaUsuarios;
+    delete historial;
+    delete persistencia;
+    usuarioActual = nullptr;
+}
+
 // ---------------------------------------------------------------------
-// cargarTodo: reconstruye usuariosSimulados y las tareas simuladas a
-// partir de usuarios.csv y tareas.csv. Si un archivo viene vacio (primera
-// ejecucion del programa, o CSV borrado), siembra los datos de ejemplo
-// como respaldo, igual que hacia antes el constructor.
-//
-// Los campos numericos (id, idUsuarioResponsable) se convierten con
-// stoi() dentro de un try/catch: si un CSV fue editado a mano y quedo con
-// un valor no numerico, esa fila se descarta con un aviso en vez de
-// crashear el programa.
+// Carga y Persistencia
 // ---------------------------------------------------------------------
 void GestorSistema::cargarTodo() {
-    // --- Usuarios ---
+    // 1. Cargar Usuarios
     vector<vector<string>> filasUsuarios = persistencia->cargarUsuarios("usuarios.csv");
-
     if (!filasUsuarios.empty()) {
-        for (size_t i = 0; i < filasUsuarios.size(); ++i) {
-            const vector<string>& fila = filasUsuarios[i];
+        for (const auto& fila : filasUsuarios) {
             try {
                 int id = stoi(fila[0]);
                 string nombre = fila[1];
                 Rol rol = textoARol(fila[2]);
                 string contrasena = fila[3];
-                usuariosSimulados.push_back(new Usuario(id, nombre, contrasena, rol));
+                listaUsuarios->insertar(id, nombre, contrasena, rol);
             } catch (const exception&) {
-                cout << "Aviso: fila de usuarios.csv con ID invalido; se omite." << endl;
+                cout << "Aviso: fila de usuarios.csv invalida omitida." << endl;
             }
         }
     } else {
-        // Primera ejecucion (o archivo vacio): sembrar usuarios de prueba.
-        usuariosSimulados.push_back(new Usuario(1, "Administrador", "admin123", Rol::ADMINISTRADOR));
-        usuariosSimulados.push_back(new Usuario(2, "Usuario Normal", "user123", Rol::USUARIO_NORMAL));
+        // Usuarios por defecto si el archivo esta vacio
+        listaUsuarios->insertar(1, "Administrador", "admin123", Rol::ADMINISTRADOR);
+        listaUsuarios->insertar(2, "Usuario Normal", "user123", Rol::USUARIO_NORMAL);
     }
 
-    // --- Tareas ---
+    // 2. Cargar Tareas Principales
     vector<vector<string>> filasTareas = persistencia->cargarTareas("tareas.csv");
+    for (const auto& fila : filasTareas) {
+        try {
+            int id = stoi(fila[0]);
+            string prioridad = fila[1];
+            int idResp = stoi(fila[2]);
+            string desc = fila[3];
+            string estado = fila[4];
 
-    if (!filasTareas.empty()) {
-        for (size_t i = 0; i < filasTareas.size(); ++i) {
-            const vector<string>& fila = filasTareas[i];
-            try {
-                int id = stoi(fila[0]);
-                string prioridad = fila[1];
-                int idResponsable = stoi(fila[2]);
-                string descripcion = fila[3];
-                string estado = fila[4];
+            Tarea* nueva = new Tarea(id, prioridad, estado, desc, idResp);
+            arbolTareas->agregarTarea(nueva);
 
-                idsTareasSimuladas.push_back(id);
-                prioridadesSimuladas.push_back(prioridad);
-                responsablesSimulados.push_back(idResponsable);
-                descripcionesSimuladas.push_back(descripcion);
-                estadosSimuladas.push_back(estado);
-            } catch (const exception&) {
-                cout << "Aviso: fila de tareas.csv con ID invalido; se omite." << endl;
+            if (estado != "Completada") {
+                colaFIFO->encolar(nueva);
+                colaPrioridad->encolar(nueva);
             }
+        } catch (const exception&) {
+            cout << "Aviso: fila de tareas.csv invalida omitida." << endl;
         }
-    } else {
-        // Primera ejecucion (o archivo vacio): sembrar tareas de ejemplo.
-        idsTareasSimuladas.push_back(10);
-        prioridadesSimuladas.push_back("ALTA");
-        responsablesSimulados.push_back(1);
-        estadosSimuladas.push_back("Pendiente");
-        descripcionesSimuladas.push_back("Tarea de ejemplo del administrador");
-
-        idsTareasSimuladas.push_back(11);
-        prioridadesSimuladas.push_back("MEDIA");
-        responsablesSimulados.push_back(2);
-        estadosSimuladas.push_back("Pendiente");
-        descripcionesSimuladas.push_back("Tarea de ejemplo del usuario normal");
     }
 
-    // --- Subtareas (reconstruye el bosque real de tareas) ---
-    // Formato de subtareas.csv: (id, idTareaPadre, descripcion, estado).
-    // Cada fila valida se convierte a una Tarea* y se inserta en el arbol
-    // real con agregarSubtarea(idTareaPadre, nueva). Un idTareaPadre = 0
-    // significa que es una tarea de nivel superior (hija de la raiz
-    // virtual). El CSV no trae prioridad ni responsable, por lo que las
-    // tareas se reconstruyen con valores neutros.
+    // 3. Cargar Subtareas
     vector<vector<string>> filasSubtareas = persistencia->cargarSubtareas("subtareas.csv");
-
-    for (size_t i = 0; i < filasSubtareas.size(); ++i) {
-        const vector<string>& fila = filasSubtareas[i];
+    for (const auto& fila : filasSubtareas) {
         try {
             int id = stoi(fila[0]);
             int idPadre = stoi(fila[1]);
-            string descripcion = fila[2];
+            string desc = fila[2];
             string estado = fila[3];
 
-            Tarea* nueva = new Tarea(id, "SIN_PRIORIDAD", estado, descripcion, -1);
-            if (!arbolTareas->agregarSubtarea(idPadre, nueva)) {
-                // El padre no existe en el arbol: la tarea no se inserta y
-                // el arbol no la tomo, asi que quien la creo con new debe
-                // liberarla aqui para no fugarla.
-                cout << "Aviso: fila de subtareas.csv con idTareaPadre "
-                     << "inexistente; se omite." << endl;
-                delete nueva;
+            if (idPadre != 0) {
+                Tarea* nueva = new Tarea(id, "MEDIA", estado, desc, -1);
+                if (arbolTareas->agregarSubtarea(idPadre, nueva)) {
+                    if (estado != "Completada") {
+                        colaFIFO->encolar(nueva);
+                        colaPrioridad->encolar(nueva);
+                    }
+                } else {
+                    delete nueva;
+                }
             }
         } catch (const exception&) {
-            cout << "Aviso: fila de subtareas.csv con ID invalido; se omite." << endl;
-        }
-    }
-}
-
-// ---------------------------------------------------------------------
-// Destructor: libera con delete cada puntero del cual la clase es duena.
-//
-// ORDEN DE ELIMINACION (evita acceder a memoria ya liberada):
-//   - Las colas (colaFIFO, colaPrioridad) solo administran sus NodoTarea y
-//     guardan una referencia PRESTADA a las Tarea; al destruirse liberan
-//     unicamente sus nodos y no tocan las Tarea.
-//   - arbolTareas es el DUEÑO de las Tarea de nivel superior (su destructor
-//     las libera recursivamente, junto con la raíz virtual). Por eso se
-//     destruyen primero las "observadoras" (las colas) y al final el
-//     "propietario" (el árbol): así ningún destructor queda con punteros a
-//     memoria que ya fue liberada.
-//   - persistencia es independiente de las anteriores.
-//
-// Los punteros a los modulos pendientes de integracion (historial y
-// listaUsuarios) siguen valiendo nullptr y NO se liberan aqui: hacer delete
-// de un tipo incompleto (solo declarado adelante) es un comportamiento
-// indefinido, y se activaran cuando cada companero integre su modulo.
-//
-// usuarioActual NO se libera: apunta a un nodo dentro de usuariosSimulados
-// (o, cuando se integre, dentro de listaUsuarios), y ese vector ya se
-// encarga de liberar sus elementos abajo. Hacerle delete aqui provocaria
-// una doble liberacion de memoria (undefined behavior).
-// ---------------------------------------------------------------------
-GestorSistema::~GestorSistema() {
-    // Primero las colas (solo nodos; referencias prestadas a las Tarea)...
-    delete colaFIFO;
-    delete colaPrioridad;
-
-    // ... y al final el árbol, propietario real de las Tarea.
-    delete arbolTareas;
-
-    delete persistencia;  // Independiente de las estructuras de tareas.
-
-    // Pendientes de integracion (siguen en nullptr; liberar al integrar):
-    // delete historial;
-    // delete listaUsuarios;
-
-    // Limpieza de la SIMULACION temporal (se elimina al integrar las listas
-    // reales, que ya administran su propia memoria).
-    usuarioActual = nullptr;  // Evita punteros colgantes al liberar el respaldo.
-    for (size_t i = 0; i < usuariosSimulados.size(); ++i) {
-        delete usuariosSimulados[i];
-    }
-    usuariosSimulados.clear();
-}
-
-// ---------------------------------------------------------------------
-// iniciarSesion: valida un id y contrasena para abrir una sesion.
-//
-// Cuando la clase ListaUsuarios exista en el repo, este metodo buscara al
-// usuario ahi. Por ahora se busca en el registro simulado (usuariosSimulados,
-// ya reconstruido desde el CSV por cargarTodo()), de manera que un usuario
-// agregado en una sesion anterior tambien pueda iniciar sesion despues de
-// reabrir el programa.
-// Devuelve nullptr (nunca crashea) si el id no existe o la contrasena es
-// incorrecta, y deja usuarioActual en nullptr.
-// ---------------------------------------------------------------------
-Usuario* GestorSistema::iniciarSesion(int id, const std::string& contrasena) {
-    // Cierra cualquier sesion previa antes de validar la nueva.
-    usuarioActual = nullptr;
-
-    // --- SIMULACION TEMPORAL (reemplazar por listaUsuarios al integrar) ---
-    for (size_t i = 0; i < usuariosSimulados.size(); ++i) {
-        if (usuariosSimulados[i]->getId() == id) {
-            // Id encontrado: debe coincidir ademas la contrasena.
-            if (usuariosSimulados[i]->validarContrasena(contrasena)) {
-                usuarioActual = usuariosSimulados[i];
-                return usuarioActual;
-            }
-            return nullptr;  // Id correcto pero contrasena incorrecta.
+            cout << "Aviso: fila de subtareas.csv invalida omitida." << endl;
         }
     }
 
-    return nullptr;   // No existe ningun usuario con ese id.
-}
+    // Si no habia tareas, sembrar ejemplos
+    if (arbolTareas->contarNodos() == 0) {
+        Tarea* t1 = new Tarea(10, "ALTA", "Pendiente", "Respaldar Base de Datos", 1);
+        Tarea* t2 = new Tarea(11, "MEDIA", "Pendiente", "Actualizar Documentacion", 2);
+        arbolTareas->agregarTarea(t1);
+        arbolTareas->agregarTarea(t2);
 
-// ---------------------------------------------------------------------
-// getUsuarioActual: devuelve el usuario con la sesion activa, o nullptr
-// si todavia no ha iniciado sesion nadie.
-// ---------------------------------------------------------------------
-Usuario* GestorSistema::getUsuarioActual() {
-    return usuarioActual;
-}
+        colaFIFO->encolar(t1);
+        colaFIFO->encolar(t2);
+        colaPrioridad->encolar(t1);
+        colaPrioridad->encolar(t2);
 
-// =====================================================================
-//                       GESTION DE USUARIOS
-// (Pendiente de conectar con ListaUsuarios; hoy usan la simulacion local,
-//  que ahora SI persiste correctamente entre ejecuciones gracias a
-//  cargarTodo() + guardarTodo())
-// =====================================================================
-
-bool GestorSistema::agregarUsuario(int id, const std::string& nombre, Rol rol, const std::string& contrasena) {
-    cout << "  [Pendiente de conectar con ListaUsuarios] usando simulacion local." << endl;
-
-    for (size_t i = 0; i < usuariosSimulados.size(); ++i) {
-        if (usuariosSimulados[i]->getId() == id) {
-            cout << "Error: ya existe un usuario con el ID " << id << "." << endl;
-            return false;                    // Sin duplicados.
-        }
-    }
-    if (nombre.empty() || contrasena.empty()) {
-        cout << "Error: el nombre y la contrasena no pueden estar vacios." << endl;
-        return false;
-    }
-
-    usuariosSimulados.push_back(new Usuario(id, nombre, contrasena, rol));
-    cout << "Usuario '" << nombre << "' (ID " << id << ") agregado correctamente." << endl;
-
-    guardarTodo();
-    string idAud = (usuarioActual != nullptr) ? to_string(usuarioActual->getId()) : "-1";
-    persistencia->registrarAuditoria(idAud, "agregarUsuario", to_string(id));
-    return true;
-}
-
-bool GestorSistema::actualizarUsuario(int id, const std::string& nombre, Rol rol) {
-    cout << "  [Pendiente de conectar con ListaUsuarios] usando simulacion local." << endl;
-
-    for (size_t i = 0; i < usuariosSimulados.size(); ++i) {
-        if (usuariosSimulados[i]->getId() == id) {
-            if (nombre.empty()) {
-                cout << "Error: el nuevo nombre no puede estar vacio." << endl;
-                return false;
-            }
-            usuariosSimulados[i]->setNombre(nombre);
-            usuariosSimulados[i]->setRol(rol);
-            cout << "Usuario ID " << id << " actualizado correctamente." << endl;
-
-            guardarTodo();
-            string idAud = (usuarioActual != nullptr) ? to_string(usuarioActual->getId()) : "-1";
-            persistencia->registrarAuditoria(idAud, "actualizarUsuario", to_string(id));
-            return true;
-        }
-    }
-
-    cout << "No se encontro un usuario con el ID " << id << "." << endl;
-    return false;
-}
-
-bool GestorSistema::eliminarUsuario(int id) {
-    cout << "  [Pendiente de conectar con ListaUsuarios] usando simulacion local." << endl;
-
-    for (size_t i = 0; i < usuariosSimulados.size(); ++i) {
-        if (usuariosSimulados[i]->getId() == id) {
-            // Se registra quien realiza la accion ANTES de que la sesion pueda
-            // quedar sin usuario (caso: alguien elimina su propia cuenta).
-            string idAud = (usuarioActual != nullptr) ? to_string(usuarioActual->getId()) : "-1";
-
-            if (usuariosSimulados[i] == usuarioActual) {
-                usuarioActual = nullptr;
-                cout << "Aviso: la sesion activa se cerro (su usuario fue eliminado)." << endl;
-            }
-            delete usuariosSimulados[i];
-            usuariosSimulados.erase(usuariosSimulados.begin() + i);
-
-            cout << "Usuario ID " << id << " eliminado correctamente." << endl;
-
-            guardarTodo();
-            persistencia->registrarAuditoria(idAud, "eliminarUsuario", to_string(id));
-            return true;
-        }
-    }
-
-    cout << "No se encontro un usuario con el ID " << id << "." << endl;
-    return false;
-}
-
-void GestorSistema::listarUsuarios() {
-    cout << "  [Pendiente de conectar con ListaUsuarios] usando simulacion local." << endl;
-
-    if (usuariosSimulados.empty()) {
-        cout << "No hay usuarios registrados." << endl;
-        return;
-    }
-
-    cout << "--- Lista de usuarios ---" << endl;
-    for (size_t i = 0; i < usuariosSimulados.size(); ++i) {
-        cout << "  " << usuariosSimulados[i]->toString() << endl;
+        Tarea* sub1 = new Tarea(101, "BAJA", "Pendiente", "Comprimir archivos de exportacion", 1);
+        arbolTareas->agregarSubtarea(10, sub1);
+        colaFIFO->encolar(sub1);
+        colaPrioridad->encolar(sub1);
     }
 }
 
-Usuario* GestorSistema::buscarUsuario(int id) {
-    cout << "  [Pendiente de conectar con ListaUsuarios] usando simulacion local." << endl;
-
-    for (size_t i = 0; i < usuariosSimulados.size(); ++i) {
-        if (usuariosSimulados[i]->getId() == id) {
-            return usuariosSimulados[i];
-        }
-    }
-    return nullptr;
-}
-
-// =====================================================================
-//                       GESTION DE TAREAS
-// (Ya conectada con las estructuras reales: ArbolSubtareas (dueño de las
-//  Tarea), ColaTareas y ColaPrioridad. Los vectores de simulacion se
-//  conservan temporalmente en la clase, pero este bloque ya no los usa;
-//  se eliminaran por completo cuando todos los metodos esten migrados.)
-// =====================================================================
-
-void GestorSistema::agregarTarea(int id, const std::string& prioridad, int idResponsable, const std::string& descripcion) {
-    if (arbolTareas->buscar(id) != nullptr) {
-        cout << "Error: ya existe una tarea con el ID " << id << "." << endl;
-        return;                          // Sin duplicados.
-    }
-    if (descripcion.empty()) {
-        cout << "Error: la descripcion no puede estar vacia." << endl;
-        return;
-    }
-
-    // Crea la Tarea real (el árbol es su DUEÑO y la liberará), la agrega
-    // como tarea de nivel superior y la encola en ambas colas, que guardan
-    // una referencia PRESTADA a la misma Tarea (no la liberan).
-    Tarea* tarea = new Tarea(id, prioridad, "Pendiente", descripcion, idResponsable);
-    arbolTareas->agregarTarea(tarea);
-    colaFIFO->encolar(tarea);
-    colaPrioridad->encolar(tarea);
-
-    cout << "Tarea ID " << id << " agregada correctamente." << endl;
-
-    guardarTodo();
-    string idAud = (usuarioActual != nullptr) ? to_string(usuarioActual->getId()) : "-1";
-    persistencia->registrarAuditoria(idAud, "agregarTarea", to_string(id));
-}
-
-void GestorSistema::actualizarTarea(int id, const std::string& descripcion) {
-    cout << "  [Pendiente de conectar con ColaTareas] usando simulacion local." << endl;
-
-    for (size_t i = 0; i < idsTareasSimuladas.size(); ++i) {
-        if (idsTareasSimuladas[i] == id) {
-            if (descripcion.empty()) {
-                cout << "Error: la nueva descripcion no puede estar vacia." << endl;
-                return;
-            }
-            descripcionesSimuladas[i] = descripcion;
-            cout << "Tarea ID " << id << " actualizada correctamente." << endl;
-
-            guardarTodo();
-            string idAud = (usuarioActual != nullptr) ? to_string(usuarioActual->getId()) : "-1";
-            persistencia->registrarAuditoria(idAud, "actualizarTarea", to_string(id));
-            return;
-        }
-    }
-
-    cout << "No se encontro una tarea con el ID " << id << "." << endl;
-}
-
-void GestorSistema::eliminarTarea(int id) {
-    if (!arbolTareas->eliminar(id)) {
-        cout << "No se encontro una tarea con el ID " << id << "." << endl;
-        return;
-    }
-
-    cout << "Tarea ID " << id << " eliminada correctamente." << endl;
-
-    guardarTodo();
-    string idAud = (usuarioActual != nullptr) ? to_string(usuarioActual->getId()) : "-1";
-    persistencia->registrarAuditoria(idAud, "eliminarTarea", to_string(id));
-}
-
-void GestorSistema::listarTareasPendientes() {
-    bool hayPendientes = false;
-
-    // Recorre el bosque real con el nuevo recorrido de filtrado de
-    // ArbolSubtareas y muestra solo las tareas cuyo estado no sea
-    // "Completada", con el mismo formato que usaba la version simulada.
-    arbolTareas->recorrerConFiltro(
-        [](Tarea* tarea) { return tarea->getEstado() != "Completada"; },
-        [&](Tarea* tarea) {
-            cout << "  ID " << tarea->getId()
-                 << " | Prioridad: " << tarea->getPrioridad()
-                 << " | Responsable: " << tarea->getIdUsuarioResponsable()
-                 << " | Estado: " << tarea->getEstado()
-                 << " | " << tarea->getDescripcion() << endl;
-            hayPendientes = true;
-        });
-
-    if (!hayPendientes) {
-        cout << "No hay tareas pendientes." << endl;
-    }
-}
-
-void GestorSistema::buscarTarea(int id) {
-    Tarea* tarea = arbolTareas->buscar(id);
-    if (tarea == nullptr) {
-        cout << "No se encontro una tarea con el ID " << id << "." << endl;
-        return;
-    }
-
-    cout << "Tarea ID " << tarea->getId()
-         << " | Prioridad: " << tarea->getPrioridad()
-         << " | Responsable: " << tarea->getIdUsuarioResponsable()
-         << " | Estado: " << tarea->getEstado()
-         << " | " << tarea->getDescripcion() << endl;
-}
-
-// ---------------------------------------------------------------------
-// cambiarEstadoTarea: cambia el estado de una tarea.
-// Regla de rol: si usuarioActual es USUARIO_NORMAL, el cambio solo se
-// permite cuando idUsuario coincide con el responsable asignado a la
-// tarea. Un ADMINISTRADOR puede cambiar cualquier estado.
-// ---------------------------------------------------------------------
-bool GestorSistema::cambiarEstadoTarea(int idTarea, int idUsuario, const std::string& nuevoEstado) {
-    if (usuarioActual == nullptr) {
-        cout << "Error: no hay una sesion activa para cambiar estados." << endl;
-        return false;
-    }
-
-    Tarea* tarea = arbolTareas->buscar(idTarea);
-    if (tarea == nullptr) {
-        cout << "No se encontro una tarea con el ID " << idTarea << "." << endl;
-        return false;
-    }
-
-    // Validacion de rol para usuarios normales.
-    if (usuarioActual->getRol() == Rol::USUARIO_NORMAL) {
-        if (tarea->getIdUsuarioResponsable() != idUsuario) {
-            cout << "Error: un usuario normal solo puede cambiar el estado de las "
-                    "tareas que le fueron asignadas." << endl;
-            return false;
-        }
-        cout << "Permiso validado: la tarea esta asignada al usuario " << idUsuario << "." << endl;
-    }
-
-    tarea->setEstado(nuevoEstado);
-    cout << "Estado de la tarea " << idTarea << " cambiado a '" << nuevoEstado << "'." << endl;
-
-    guardarTodo();
-    string idAud = (usuarioActual != nullptr) ? to_string(usuarioActual->getId()) : "-1";
-    persistencia->registrarAuditoria(idAud, "cambioEstado", to_string(idTarea));
-    return true;
-}
-
-// =====================================================================
-//                          PERSISTENCIA
-// =====================================================================
-
-// ---------------------------------------------------------------------
-// aplanarArbolParaGuardar: recorre el bosque real de tareas excluyendo la
-// raíz virtual y arma una fila por cada tarea con el formato que espera
-// subtareas.csv: (id, idTareaPadre, descripcion, estado).
-//
-// El recorrido es pre-orden, así que cada tarea queda escrita ANTES que sus
-// subtareas, lo cual permite reconstruir el árbol al cargar sin depender
-// del orden en el archivo. Las tareas de nivel superior llevan idTareaPadre
-// = 0 (el id de la raíz virtual), que es justo lo que espera
-// arbolTareas->agregarSubtarea() para volver a insertarlas como hijas
-// directas de la raíz virtual.
-// ---------------------------------------------------------------------
 vector<vector<string>> GestorSistema::aplanarArbolParaGuardar() {
     vector<vector<string>> filas;
-
     Tarea* raizVirtual = arbolTareas->getRaiz();
-    if (raizVirtual == nullptr) {
-        return filas;
-    }
+    if (raizVirtual == nullptr) return filas;
 
-    // Visitante recursivo: empuja la fila del nodo actual (con su padre) y
-    // luego recorre sus subtareas. Se usa std::function para poder
-    // llamarse a sí mismo.
     function<void(Tarea*, Tarea*)> visitar = [&](Tarea* padre, Tarea* nodo) {
-        if (nodo == nullptr) {
-            return;
-        }
-
+        if (nodo == nullptr) return;
         vector<string> fila;
         fila.push_back(to_string(nodo->getId()));
         fila.push_back(to_string(padre->getId()));
@@ -524,152 +162,593 @@ vector<vector<string>> GestorSistema::aplanarArbolParaGuardar() {
         fila.push_back(nodo->getEstado());
         filas.push_back(fila);
 
-        vector<Tarea*> subtareas = nodo->getSubtareas();
-        for (Tarea* subtarea : subtareas) {
-            visitar(nodo, subtarea);
+        for (Tarea* sub : nodo->getSubtareas()) {
+            visitar(nodo, sub);
         }
     };
 
-    // Arranca desde cada hijo de la raíz virtual: la propia raíz virtual
-    // (id 0) NO se escribe como fila.
-    vector<Tarea*> nivelSuperior = raizVirtual->getSubtareas();
-    for (Tarea* tarea : nivelSuperior) {
+    for (Tarea* tarea : raizVirtual->getSubtareas()) {
         visitar(raizVirtual, tarea);
     }
-
     return filas;
 }
 
-// ---------------------------------------------------------------------
-// guardarTodo: guarda el estado actual en los CSV (lo llama CLI como
-// gestor.guardarTodo()).
-//
-// Usuarios y tareas se escriben desde los vectores de simulacion todavia
-// usados por los modulos pendientes; las subtareas se aplanan desde el
-// arbol real (ArbolSubtareas), que ya es quien posee las tareas.
-// ---------------------------------------------------------------------
+vector<Tarea*> GestorSistema::obtenerTodasLasTareas() {
+    vector<Tarea*> lista;
+    arbolTareas->recorrerConFiltro(
+        [](Tarea*) { return true; },
+        [&](Tarea* t) { lista.push_back(t); }
+    );
+    return lista;
+}
+
 void GestorSistema::guardarTodo() {
     cout << "Guardando cambios en los archivos CSV..." << endl;
 
-    // Usuarios: columnas (id, nombre, rol, password) segun guardarUsuarios.
+    // 1. Guardar usuarios desde ListaUsuarios
     vector<vector<string>> filasUsuarios;
-    for (size_t i = 0; i < usuariosSimulados.size(); ++i) {
-        vector<string> fila;
-        fila.push_back(to_string(usuariosSimulados[i]->getId()));
-        fila.push_back(usuariosSimulados[i]->getNombre());
-        fila.push_back(rolATexto(usuariosSimulados[i]->getRol()));
-        fila.push_back(usuariosSimulados[i]->getContrasena());
-        filasUsuarios.push_back(fila);
+    int cantUsuarios = listaUsuarios->contar();
+    for (int i = 1; i <= 9999; ++i) {
+        Usuario* u = listaUsuarios->buscar(i);
+        if (u != nullptr) {
+            vector<string> fila;
+            fila.push_back(to_string(u->getId()));
+            fila.push_back(u->getNombre());
+            fila.push_back(rolATexto(u->getRol()));
+            fila.push_back(u->getContrasena());
+            filasUsuarios.push_back(fila);
+            if (static_cast<int>(filasUsuarios.size()) == cantUsuarios) break;
+        }
     }
     persistencia->guardarUsuarios("usuarios.csv", filasUsuarios);
 
-    // Tareas: columnas (id, prioridad, idUsuarioResponsable, descripcion,
-    // estado) segun guardarTareas.
+    // 2. Guardar tareas de nivel superior
     vector<vector<string>> filasTareas;
-    for (size_t i = 0; i < idsTareasSimuladas.size(); ++i) {
-        vector<string> fila;
-        fila.push_back(to_string(idsTareasSimuladas[i]));
-        fila.push_back(prioridadesSimuladas[i]);
-        fila.push_back(to_string(responsablesSimulados[i]));
-        fila.push_back(descripcionesSimuladas[i]);
-        fila.push_back(estadosSimuladas[i]);
-        filasTareas.push_back(fila);
+    Tarea* raizVirtual = arbolTareas->getRaiz();
+    if (raizVirtual != nullptr) {
+        for (Tarea* t : raizVirtual->getSubtareas()) {
+            vector<string> fila;
+            fila.push_back(to_string(t->getId()));
+            fila.push_back(t->getPrioridad());
+            fila.push_back(to_string(t->getIdUsuarioResponsable()));
+            fila.push_back(t->getDescripcion());
+            fila.push_back(t->getEstado());
+            filasTareas.push_back(fila);
+        }
     }
     persistencia->guardarTareas("tareas.csv", filasTareas);
 
-    // Subtareas: columnas (id, idTareaPadre, descripcion, estado) segun
-    // guardarSubtareas, generadas aplanando el arbol real de tareas.
+    // 3. Guardar jerarquia de subtareas
     vector<vector<string>> filasSubtareas = aplanarArbolParaGuardar();
     persistencia->guardarSubtareas("subtareas.csv", filasSubtareas);
 
     cout << "Cambios guardados correctamente." << endl;
 }
 
-// =====================================================================
-//              REPORTE ORDENADO (Ordenador real del proyecto)
-// =====================================================================
+// ---------------------------------------------------------------------
+// Autenticacion y Sesion
+// ---------------------------------------------------------------------
+Usuario* GestorSistema::iniciarSesion(int id, const string& contrasena) {
+    usuarioActual = nullptr;
+    Usuario* u = listaUsuarios->buscar(id);
+    if (u != nullptr && u->validarContrasena(contrasena)) {
+        usuarioActual = u;
+        return usuarioActual;
+    }
+    return nullptr;
+}
 
-// Comparador para int: orden ascendente (lo usan los tres algoritmos).
-static bool menorInt(const int& a, const int& b) {
-    return a < b;
+Usuario* GestorSistema::getUsuarioActual() {
+    return usuarioActual;
 }
 
 // ---------------------------------------------------------------------
-// mostrarReporteOrdenado: muestra un reporte de prueba ordenado con el
-// Ordenador REAL del proyecto (Bubble Sort, Merge Sort y Quick Sort,
-// todos reales del repo, ninguno renombrado). Como aun no hay una lista
-// real de tareas conectada, se ordena un vector<int> de ejemplo.
+// Módulo de Gestión de Usuarios
 // ---------------------------------------------------------------------
-void GestorSistema::mostrarReporteOrdenado() {
-    cout << "  [Reporte usando el Ordenador real del proyecto]" << endl;
-    cout << "  (Datos de prueba: no hay aun una lista real de tareas conectada.)" << endl;
-
-    vector<int> datos;
-    datos.push_back(42);
-    datos.push_back(17);
-    datos.push_back(8);
-    datos.push_back(35);
-    datos.push_back(23);
-    int n = static_cast<int>(datos.size());
-
-    // El Ordenador ordena arreglos in-place; se preparan tres copias
-    // independientes (una por algoritmo) para mostrar cada resultado.
-    int* arrBurbuja = new int[n];
-    int* arrMerge   = new int[n];
-    int* arrQuick   = new int[n];
-    for (int i = 0; i < n; ++i) {
-        arrBurbuja[i] = datos[i];
-        arrMerge[i]   = datos[i];
-        arrQuick[i]   = datos[i];
+bool GestorSistema::agregarUsuario(int id, const string& nombre, Rol rol, const string& contrasena) {
+    if (listaUsuarios->existeId(id)) {
+        cout << "Error: ya existe un usuario con el ID " << id << "." << endl;
+        return false;
+    }
+    if (nombre.empty() || contrasena.empty()) {
+        cout << "Error: nombre y contrasena no pueden estar vacios." << endl;
+        return false;
     }
 
-    Ordenador<int> ordenador;
-    ordenador.burbuja(arrBurbuja, n, menorInt);
-    ordenador.mergeSort(arrMerge, n, menorInt);
-    ordenador.quickSort(arrQuick, n, menorInt);
-
-    cout << "\n--- Reporte ordenado (Bubble Sort real) ---" << endl;
-    for (int i = 0; i < n; ++i) {
-        cout << "  " << arrBurbuja[i];
+    if (!listaUsuarios->insertar(id, nombre, contrasena, rol)) {
+        return false;
     }
-    cout << endl;
 
-    cout << "\n--- Reporte ordenado (Merge Sort real) ---" << endl;
-    for (int i = 0; i < n; ++i) {
-        cout << "  " << arrMerge[i];
-    }
-    cout << endl;
+    int idAct = usuarioActual ? usuarioActual->getId() : -1;
+    string pos = nombre + "|" + rolATexto(rol) + "|" + contrasena;
+    historial->registrarAccion(Accion(TipoAccion::AGREGAR, TipoEntidad::USUARIO, id, idAct, "", pos));
 
-    cout << "\n--- Reporte ordenado (Quick Sort real) ---" << endl;
-    for (int i = 0; i < n; ++i) {
-        cout << "  " << arrQuick[i];
-    }
-    cout << endl << endl;
-
-    // Liberar la memoria manual (regla del proyecto).
-    delete[] arrBurbuja;
-    delete[] arrMerge;
-    delete[] arrQuick;
+    persistencia->registrarAuditoria(to_string(idAct), "AGREGAR_USUARIO", to_string(id));
+    guardarTodo();
+    return true;
 }
 
-// =====================================================================
-//              HISTORIAL (deshacer / rehacer)
-// =====================================================================
+bool GestorSistema::actualizarUsuario(int id, const string& nombre, Rol rol) {
+    Usuario* u = listaUsuarios->buscar(id);
+    if (u == nullptr) {
+        cout << "Error: no se encontro un usuario con el ID " << id << "." << endl;
+        return false;
+    }
 
+    string prev = u->getNombre() + "|" + rolATexto(u->getRol()) + "|" + u->getContrasena();
+    if (!listaUsuarios->modificar(id, nombre, rol)) {
+        return false;
+    }
+
+    int idAct = usuarioActual ? usuarioActual->getId() : -1;
+    string pos = nombre + "|" + rolATexto(rol) + "|" + u->getContrasena();
+    historial->registrarAccion(Accion(TipoAccion::ACTUALIZAR, TipoEntidad::USUARIO, id, idAct, prev, pos));
+
+    persistencia->registrarAuditoria(to_string(idAct), "ACTUALIZAR_USUARIO", to_string(id));
+    guardarTodo();
+    return true;
+}
+
+bool GestorSistema::eliminarUsuario(int id) {
+    Usuario* u = listaUsuarios->buscar(id);
+    if (u == nullptr) {
+        cout << "Error: no se encontro un usuario con el ID " << id << "." << endl;
+        return false;
+    }
+
+    int idAct = usuarioActual ? usuarioActual->getId() : -1;
+    string prev = u->getNombre() + "|" + rolATexto(u->getRol()) + "|" + u->getContrasena();
+
+    if (u == usuarioActual) {
+        usuarioActual = nullptr;
+        cout << "Aviso: la sesion activa se ha cerrado." << endl;
+    }
+
+    if (!listaUsuarios->eliminar(id)) {
+        return false;
+    }
+
+    historial->registrarAccion(Accion(TipoAccion::ELIMINAR, TipoEntidad::USUARIO, id, idAct, prev, ""));
+    persistencia->registrarAuditoria(to_string(idAct), "ELIMINAR_USUARIO", to_string(id));
+    guardarTodo();
+    return true;
+}
+
+void GestorSistema::listarUsuarios() {
+    if (listaUsuarios->estaVacia()) {
+        cout << "No hay usuarios registrados." << endl;
+        return;
+    }
+    listaUsuarios->mostrarAdelante();
+}
+
+Usuario* GestorSistema::buscarUsuario(int id) {
+    return listaUsuarios->buscar(id);
+}
+
+// ---------------------------------------------------------------------
+// Módulo de Gestión de Tareas
+// ---------------------------------------------------------------------
+bool GestorSistema::agregarTarea(int id, const string& prioridad, int idResponsable, const string& descripcion) {
+    if (arbolTareas->buscar(id) != nullptr) {
+        cout << "Error: ya existe una tarea con el ID " << id << "." << endl;
+        return false;
+    }
+    if (descripcion.empty()) {
+        cout << "Error: la descripcion no puede estar vacia." << endl;
+        return false;
+    }
+
+    Tarea* nueva = new Tarea(id, prioridad, "Pendiente", descripcion, idResponsable);
+    arbolTareas->agregarTarea(nueva);
+    colaFIFO->encolar(nueva);
+    colaPrioridad->encolar(nueva);
+
+    int idAct = usuarioActual ? usuarioActual->getId() : -1;
+    string pos = prioridad + "|" + to_string(idResponsable) + "|Pendiente|" + descripcion;
+    historial->registrarAccion(Accion(TipoAccion::AGREGAR, TipoEntidad::TAREA, id, idAct, "", pos));
+
+    persistencia->registrarAuditoria(to_string(idAct), "CREAR_TAREA", to_string(id));
+    guardarTodo();
+    return true;
+}
+
+bool GestorSistema::agregarSubtarea(int idPadre, int idSubtarea, const string& prioridad, int idResponsable, const string& descripcion) {
+    if (arbolTareas->buscar(idPadre) == nullptr) {
+        cout << "Error: no existe la tarea padre con ID " << idPadre << "." << endl;
+        return false;
+    }
+    if (arbolTareas->buscar(idSubtarea) != nullptr) {
+        cout << "Error: ya existe una tarea/subtarea con ID " << idSubtarea << "." << endl;
+        return false;
+    }
+
+    Tarea* nueva = new Tarea(idSubtarea, prioridad, "Pendiente", descripcion, idResponsable);
+    if (!arbolTareas->agregarSubtarea(idPadre, nueva)) {
+        delete nueva;
+        return false;
+    }
+
+    colaFIFO->encolar(nueva);
+    colaPrioridad->encolar(nueva);
+
+    int idAct = usuarioActual ? usuarioActual->getId() : -1;
+    string prev = "PADRE:" + to_string(idPadre);
+    string pos = prioridad + "|" + to_string(idResponsable) + "|Pendiente|" + descripcion;
+    historial->registrarAccion(Accion(TipoAccion::AGREGAR, TipoEntidad::TAREA, idSubtarea, idAct, prev, pos));
+
+    persistencia->registrarAuditoria(to_string(idAct), "AGREGAR_SUBTAREA", to_string(idSubtarea));
+    guardarTodo();
+    return true;
+}
+
+bool GestorSistema::actualizarTarea(int id, const string& descripcion) {
+    Tarea* t = arbolTareas->buscar(id);
+    if (t == nullptr) {
+        cout << "Error: no se encontro la tarea ID " << id << "." << endl;
+        return false;
+    }
+
+    string prev = t->getPrioridad() + "|" + to_string(t->getIdUsuarioResponsable()) + "|" + t->getEstado() + "|" + t->getDescripcion();
+    t->setDescripcion(descripcion);
+
+    int idAct = usuarioActual ? usuarioActual->getId() : -1;
+    string pos = t->getPrioridad() + "|" + to_string(t->getIdUsuarioResponsable()) + "|" + t->getEstado() + "|" + descripcion;
+    historial->registrarAccion(Accion(TipoAccion::ACTUALIZAR, TipoEntidad::TAREA, id, idAct, prev, pos));
+
+    persistencia->registrarAuditoria(to_string(idAct), "ACTUALIZAR_TAREA", to_string(id));
+    guardarTodo();
+    return true;
+}
+
+bool GestorSistema::eliminarTarea(int id) {
+    Tarea* t = arbolTareas->buscar(id);
+    if (t == nullptr) {
+        cout << "Error: no se encontro la tarea ID " << id << "." << endl;
+        return false;
+    }
+
+    int idAct = usuarioActual ? usuarioActual->getId() : -1;
+    string prev = t->getPrioridad() + "|" + to_string(t->getIdUsuarioResponsable()) + "|" + t->getEstado() + "|" + t->getDescripcion();
+
+    if (!arbolTareas->eliminar(id)) {
+        return false;
+    }
+
+    historial->registrarAccion(Accion(TipoAccion::ELIMINAR, TipoEntidad::TAREA, id, idAct, prev, ""));
+    persistencia->registrarAuditoria(to_string(idAct), "ELIMINAR_TAREA", to_string(id));
+    guardarTodo();
+    return true;
+}
+
+void GestorSistema::listarTareasPendientes() {
+    cout << "\n=== ESTRUCTURA DE TAREAS Y SUBTAREAS ===" << endl;
+
+    function<void(Tarea*, int)> mostrarSubtree = [&](Tarea* nodo, int nivel) {
+        if (nodo == nullptr) return;
+        string indent(nivel * 3, ' ');
+        cout << indent << "|-- [ID " << nodo->getId() << "] (" << nodo->getPrioridad() << ") "
+             << "Resp: " << nodo->getIdUsuarioResponsable() << " | Estado: " << nodo->getEstado()
+             << " | SLA Espera: " << nodo->getCiclosEspera() << " c. | "
+             << nodo->getDescripcion() << endl;
+
+        for (Tarea* sub : nodo->getSubtareas()) {
+            mostrarSubtree(sub, nivel + 1);
+        }
+    };
+
+    Tarea* raizVirtual = arbolTareas->getRaiz();
+    if (raizVirtual == nullptr || raizVirtual->getSubtareas().empty()) {
+        cout << "(No hay tareas registradas)" << endl;
+        return;
+    }
+
+    for (Tarea* top : raizVirtual->getSubtareas()) {
+        mostrarSubtree(top, 0);
+    }
+}
+
+void GestorSistema::buscarTarea(int id) {
+    Tarea* t = arbolTareas->buscar(id);
+    if (t == nullptr) {
+        cout << "No se encontro ninguna tarea con ID " << id << "." << endl;
+        return;
+    }
+
+    cout << "\n--- Tarea Encontrada ---" << endl;
+    cout << "ID: " << t->getId() << endl;
+    cout << "Prioridad: " << t->getPrioridad() << endl;
+    cout << "Estado: " << t->getEstado() << endl;
+    cout << "Responsable ID: " << t->getIdUsuarioResponsable() << endl;
+    cout << "Ciclos de espera SLA: " << t->getCiclosEspera() << endl;
+    cout << "Descripcion: " << t->getDescripcion() << endl;
+    cout << "Cantidad de subtareas directas: " << t->getSubtareas().size() << endl;
+}
+
+bool GestorSistema::cambiarEstadoTarea(int idTarea, int idUsuario, const string& nuevoEstado) {
+    if (usuarioActual == nullptr) {
+        cout << "Error: no hay sesion activa." << endl;
+        return false;
+    }
+
+    Tarea* t = arbolTareas->buscar(idTarea);
+    if (t == nullptr) {
+        cout << "Error: no se encontro la tarea ID " << idTarea << "." << endl;
+        return false;
+    }
+
+    if (usuarioActual->getRol() == Rol::USUARIO_NORMAL) {
+        if (t->getIdUsuarioResponsable() != idUsuario) {
+            cout << "Error de permisos: solo puede modificar tareas asignadas a su ID." << endl;
+            return false;
+        }
+    }
+
+    string estadoAnterior = t->getEstado();
+    string prev = t->getPrioridad() + "|" + to_string(t->getIdUsuarioResponsable()) + "|" + estadoAnterior + "|" + t->getDescripcion();
+    t->setEstado(nuevoEstado);
+
+    string pos = t->getPrioridad() + "|" + to_string(t->getIdUsuarioResponsable()) + "|" + nuevoEstado + "|" + t->getDescripcion();
+    historial->registrarAccion(Accion(TipoAccion::ACTUALIZAR, TipoEntidad::TAREA, idTarea, usuarioActual->getId(), prev, pos));
+
+    persistencia->registrarAuditoria(to_string(usuarioActual->getId()), "CAMBIO_ESTADO", to_string(idTarea));
+    guardarTodo();
+    cout << "Estado de tarea " << idTarea << " actualizado a '" << nuevoEstado << "'." << endl;
+    return true;
+}
+
+// ---------------------------------------------------------------------
+// Motor de Ejecucion & Escalamiento SLA (Prevencion de Inanicion)
+// ---------------------------------------------------------------------
+void GestorSistema::verificarEscalamientoSLA() {
+    vector<Tarea*> tareas = obtenerTodasLasTareas();
+    for (Tarea* t : tareas) {
+        if (t->getEstado() == "Pendiente" && t->getPrioridad() != "ALTA") {
+            t->incrementarCiclosEspera();
+            if (t->getCiclosEspera() >= MAX_CICLOS_ESPERA_SLA) {
+                cout << "\n>>> [ALERTA SLA] Tarea ID " << t->getId() << " (" << t->getDescripcion()
+                     << ") acumulo " << t->getCiclosEspera() << " ciclos. ESCALANDO a Prioridad ALTA!" << endl;
+
+                t->setPrioridad("ALTA");
+                colaPrioridad->encolar(t);
+
+                string idAct = usuarioActual ? to_string(usuarioActual->getId()) : "-1";
+                persistencia->registrarAuditoria(idAct, "ESCALAMIENTO_SLA_INANICION", to_string(t->getId()));
+            }
+        }
+    }
+}
+
+bool GestorSistema::atenderSiguienteTarea() {
+    Tarea* aAtender = nullptr;
+
+    if (!colaPrioridad->estaVacia()) {
+        aAtender = colaPrioridad->frente();
+        colaPrioridad->desencolar();
+    } else if (!colaFIFO->estaVacia()) {
+        aAtender = colaFIFO->frente();
+        colaFIFO->desencolar();
+    }
+
+    if (aAtender == nullptr) {
+        cout << "No hay tareas pendientes en la cola de ejecucion." << endl;
+        return false;
+    }
+
+    aAtender->setEstado("En Proceso");
+    aAtender->resetCiclosEspera();
+
+    cout << "\n>>> ATENDIENDO TAREA ID " << aAtender->getId()
+         << " | Prioridad: " << aAtender->getPrioridad()
+         << " | Responsable: " << aAtender->getIdUsuarioResponsable()
+         << " | " << aAtender->getDescripcion() << endl;
+
+    // Incrementa ciclos de espera y aplica regla SLA de inanicion a las demas tareas
+    verificarEscalamientoSLA();
+
+    string idAct = usuarioActual ? to_string(usuarioActual->getId()) : "-1";
+    persistencia->registrarAuditoria(idAct, "ATENDER_TAREA", to_string(aAtender->getId()));
+    guardarTodo();
+    return true;
+}
+
+// ---------------------------------------------------------------------
+// Historial (Deshacer / Rehacer)
+// ---------------------------------------------------------------------
 void GestorSistema::deshacer() {
-    cout << "  [Pendiente de conectar con PilaHistorial]" << endl;
+    Accion acc;
+    if (!historial->deshacer(acc)) {
+        cout << "No hay acciones registradas para deshacer." << endl;
+        return;
+    }
 
-    string idAud = (usuarioActual != nullptr) ? to_string(usuarioActual->getId()) : "-1";
-    persistencia->registrarAuditoria(idAud, "DESHACER", "0");
+    cout << "Deshaciendo accion: " << acc.toString() << endl;
+    int idAct = usuarioActual ? usuarioActual->getId() : -1;
 
-    cout << "No hay acciones registradas que deshacer (simulacion)." << endl;
+    if (acc.getTipoEntidad() == TipoEntidad::USUARIO) {
+        if (acc.getTipoAccion() == TipoAccion::AGREGAR) {
+            listaUsuarios->eliminar(acc.getIdEntidad());
+        } else if (acc.getTipoAccion() == TipoAccion::ELIMINAR) {
+            stringstream ss(acc.getEstadoAnterior());
+            string nom, rolStr, pass;
+            getline(ss, nom, '|');
+            getline(ss, rolStr, '|');
+            getline(ss, pass, '|');
+            listaUsuarios->insertar(acc.getIdEntidad(), nom, pass, textoARol(rolStr));
+        } else if (acc.getTipoAccion() == TipoAccion::ACTUALIZAR) {
+            stringstream ss(acc.getEstadoAnterior());
+            string nom, rolStr;
+            getline(ss, nom, '|');
+            getline(ss, rolStr, '|');
+            listaUsuarios->modificar(acc.getIdEntidad(), nom, textoARol(rolStr));
+        }
+    } else if (acc.getTipoEntidad() == TipoEntidad::TAREA) {
+        if (acc.getTipoAccion() == TipoAccion::AGREGAR) {
+            arbolTareas->eliminar(acc.getIdEntidad());
+        } else if (acc.getTipoAccion() == TipoAccion::ELIMINAR) {
+            stringstream ss(acc.getEstadoAnterior());
+            string prio, respStr, est, desc;
+            getline(ss, prio, '|');
+            getline(ss, respStr, '|');
+            getline(ss, est, '|');
+            getline(ss, desc, '|');
+            Tarea* nueva = new Tarea(acc.getIdEntidad(), prio, est, desc, stoi(respStr));
+            arbolTareas->agregarTarea(nueva);
+            colaFIFO->encolar(nueva);
+            colaPrioridad->encolar(nueva);
+        } else if (acc.getTipoAccion() == TipoAccion::ACTUALIZAR) {
+            Tarea* t = arbolTareas->buscar(acc.getIdEntidad());
+            if (t != nullptr) {
+                stringstream ss(acc.getEstadoAnterior());
+                string prio, respStr, est, desc;
+                getline(ss, prio, '|');
+                getline(ss, respStr, '|');
+                getline(ss, est, '|');
+                getline(ss, desc, '|');
+                t->setPrioridad(prio);
+                t->setIdUsuarioResponsable(stoi(respStr));
+                t->setEstado(est);
+                t->setDescripcion(desc);
+            }
+        }
+    }
+
+    persistencia->registrarAuditoria(to_string(idAct), "DESHACER", to_string(acc.getIdEntidad()));
+    guardarTodo();
 }
 
 void GestorSistema::rehacer() {
-    cout << "  [Pendiente de conectar con PilaHistorial]" << endl;
+    Accion acc;
+    if (!historial->rehacer(acc)) {
+        cout << "No hay acciones para rehacer." << endl;
+        return;
+    }
 
-    string idAud = (usuarioActual != nullptr) ? to_string(usuarioActual->getId()) : "-1";
-    persistencia->registrarAuditoria(idAud, "REHACER", "0");
+    cout << "Rehaciendo accion: " << acc.toString() << endl;
+    int idAct = usuarioActual ? usuarioActual->getId() : -1;
 
-    cout << "No hay acciones deshechas que rehacer (simulacion)." << endl;
+    if (acc.getTipoEntidad() == TipoEntidad::USUARIO) {
+        if (acc.getTipoAccion() == TipoAccion::AGREGAR) {
+            stringstream ss(acc.getEstadoPosterior());
+            string nom, rolStr, pass;
+            getline(ss, nom, '|');
+            getline(ss, rolStr, '|');
+            getline(ss, pass, '|');
+            listaUsuarios->insertar(acc.getIdEntidad(), nom, pass, textoARol(rolStr));
+        } else if (acc.getTipoAccion() == TipoAccion::ELIMINAR) {
+            listaUsuarios->eliminar(acc.getIdEntidad());
+        } else if (acc.getTipoAccion() == TipoAccion::ACTUALIZAR) {
+            stringstream ss(acc.getEstadoPosterior());
+            string nom, rolStr;
+            getline(ss, nom, '|');
+            getline(ss, rolStr, '|');
+            listaUsuarios->modificar(acc.getIdEntidad(), nom, textoARol(rolStr));
+        }
+    } else if (acc.getTipoEntidad() == TipoEntidad::TAREA) {
+        if (acc.getTipoAccion() == TipoAccion::AGREGAR) {
+            stringstream ss(acc.getEstadoPosterior());
+            string prio, respStr, est, desc;
+            getline(ss, prio, '|');
+            getline(ss, respStr, '|');
+            getline(ss, est, '|');
+            getline(ss, desc, '|');
+            Tarea* nueva = new Tarea(acc.getIdEntidad(), prio, est, desc, stoi(respStr));
+            arbolTareas->agregarTarea(nueva);
+            colaFIFO->encolar(nueva);
+            colaPrioridad->encolar(nueva);
+        } else if (acc.getTipoAccion() == TipoAccion::ELIMINAR) {
+            arbolTareas->eliminar(acc.getIdEntidad());
+        } else if (acc.getTipoAccion() == TipoAccion::ACTUALIZAR) {
+            Tarea* t = arbolTareas->buscar(acc.getIdEntidad());
+            if (t != nullptr) {
+                stringstream ss(acc.getEstadoPosterior());
+                string prio, respStr, est, desc;
+                getline(ss, prio, '|');
+                getline(ss, respStr, '|');
+                getline(ss, est, '|');
+                getline(ss, desc, '|');
+                t->setPrioridad(prio);
+                t->setIdUsuarioResponsable(stoi(respStr));
+                t->setEstado(est);
+                t->setDescripcion(desc);
+            }
+        }
+    }
+
+    persistencia->registrarAuditoria(to_string(idAct), "REHACER", to_string(acc.getIdEntidad()));
+    guardarTodo();
+}
+
+// ---------------------------------------------------------------------
+// Módulo de Reportes & Ordenamiento (Análisis Asintótico Big-O)
+// ---------------------------------------------------------------------
+void GestorSistema::mostrarReporteOrdenado() {
+    vector<Tarea*> tareas = obtenerTodasLasTareas();
+    if (tareas.empty()) {
+        cout << "No hay tareas para ordenar." << endl;
+        return;
+    }
+
+    int n = static_cast<int>(tareas.size());
+    Tarea** arrBurbuja = new Tarea*[n];
+    Tarea** arrMerge = new Tarea*[n];
+    Tarea** arrQuick = new Tarea*[n];
+
+    for (int i = 0; i < n; ++i) {
+        arrBurbuja[i] = tareas[i];
+        arrMerge[i] = tareas[i];
+        arrQuick[i] = tareas[i];
+    }
+
+    Ordenador<Tarea*> ordenador;
+    ordenador.burbuja(arrBurbuja, n, menorPorId);
+    ordenador.mergeSort(arrMerge, n, menorPorPrioridad);
+    ordenador.quickSort(arrQuick, n, menorPorResponsable);
+
+    cout << "\n=======================================================" << endl;
+    cout << "        REPORTE DE TAREAS Y ALGORITMOS DE ORDENAMIENTO  " << endl;
+    cout << "=======================================================" << endl;
+    cout << "\n--- 1. BUBBLE SORT (Ordenado por ID asc) ---" << endl;
+    for (int i = 0; i < n; ++i) {
+        cout << "  ID " << arrBurbuja[i]->getId() << " | Prioridad: " << arrBurbuja[i]->getPrioridad()
+             << " | Resp: " << arrBurbuja[i]->getIdUsuarioResponsable() << " | " << arrBurbuja[i]->getDescripcion() << endl;
+    }
+
+    cout << "\n--- 2. MERGE SORT (Ordenado por Prioridad: ALTA < MEDIA < BAJA) ---" << endl;
+    for (int i = 0; i < n; ++i) {
+        cout << "  ID " << arrMerge[i]->getId() << " | Prioridad: " << arrMerge[i]->getPrioridad()
+             << " | Resp: " << arrMerge[i]->getIdUsuarioResponsable() << " | " << arrMerge[i]->getDescripcion() << endl;
+    }
+
+    cout << "\n--- 3. QUICK SORT (Ordenado por ID Usuario Responsable asc) ---" << endl;
+    for (int i = 0; i < n; ++i) {
+        cout << "  ID " << arrQuick[i]->getId() << " | Prioridad: " << arrQuick[i]->getPrioridad()
+             << " | Resp: " << arrQuick[i]->getIdUsuarioResponsable() << " | " << arrQuick[i]->getDescripcion() << endl;
+    }
+
+    delete[] arrBurbuja;
+    delete[] arrMerge;
+    delete[] arrQuick;
+
+    mostrarAnalisisAsintotico();
+}
+
+void GestorSistema::mostrarAnalisisAsintotico() {
+    cout << "\n==========================================================================" << endl;
+    cout << "             ANALISIS DE COMPLEJIDAD ASINTOTICA (BIG-O)                   " << endl;
+    cout << "==========================================================================" << endl;
+    cout << " Algoritmo    | Mejor Caso    | Caso Promedio | Peor Caso     | Memoria  " << endl;
+    cout << "--------------+---------------+---------------+---------------+-----------" << endl;
+    cout << " Bubble Sort  | O(n)          | O(n^2)        | O(n^2)        | O(1)     " << endl;
+    cout << " Merge Sort   | O(n log n)    | O(n log n)    | O(n log n)    | O(n)     " << endl;
+    cout << " Quick Sort   | O(n log n)    | O(n log n)    | O(n^2)        | O(log n) " << endl;
+    cout << "==========================================================================" << endl;
+    cout << " Explicacion Tecnica:" << endl;
+    cout << " 1. Bubble Sort: Incluye bandera de optimizacion 'intercambio'. Si el arreglo" << endl;
+    cout << "    esta ordenado, se detiene en 1 pasada -> O(n)." << endl;
+    cout << " 2. Merge Sort: Estrategia 'Divide y Vence'. Divide recursivamente en mitades" << endl;
+    cout << "    y las mezcla. Siempre ejecuta log(n) niveles y mezcla en O(n) -> O(n log n)." << endl;
+    cout << " 3. Quick Sort: Particion por pivote Lomuto central. En promedio divide a la" << endl;
+    cout << "    mitad -> O(n log n). Peor caso si el pivote es extremo repetitivo -> O(n^2)." << endl;
+    cout << "==========================================================================" << endl;
 }

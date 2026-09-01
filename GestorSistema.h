@@ -79,11 +79,18 @@ private:
     std::vector<std::string> descripcionesSimuladas;
 
     // Carga inicial: reconstruye usuariosSimulados e idsTareasSimuladas (y
-    // vectores relacionados) a partir de usuarios.csv y tareas.csv. Si un
+    // vectores relacionados) a partir de usuarios.csv y tareas.csv, y
+    // reconstruye el arbol real de tareas desde subtareas.csv. Si un
     // archivo viene vacio (primera ejecucion), siembra los datos de
     // ejemplo como respaldo. Se llama una sola vez, al final del
     // constructor.
     void cargarTodo();
+
+    // Aplana el arbol real de tareas (excluyendo la raiz virtual) en las
+    // filas de subtareas.csv: (id, idTareaPadre, descripcion, estado).
+    // Las tareas de nivel superior usan idTareaPadre = 0 (hijas de la
+    // raiz virtual).
+    std::vector<std::vector<std::string>> aplanarArbolParaGuardar();
 };
 
 #endif  // GESTOR_SISTEMA_H

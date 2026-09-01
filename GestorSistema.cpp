@@ -1,10 +1,14 @@
 #include <iostream>   // cout/endl para mensajes al usuario (nunca crashea).
 #include <string>
 #include <vector>
+#include <functional> // std::function para el visitante recursivo del aplanado.
 
 #include "GestorSistema.h"
 #include "Usuario.h"     // Real: Usuario y el enum Rol.
 #include "Ordenador.h"   // Real: Bubble Sort, Merge Sort y Quick Sort del repo.
+#include "ArbolSubtareas.h"   // Real: bosque de tareas con raíz virtual (Cris).
+#include "ColaTareas.h"       // Real: cola FIFO de tareas (Cris).
+#include "ColaPrioridad.h"    // Real: cola por prioridad de tareas (Cris).
 
 using namespace std;
 
@@ -25,20 +29,21 @@ using namespace std;
 // CSV con la codificacion canonica ("Administrador" / "Usuario Normal").
 
 // ---------------------------------------------------------------------
-// Constructor: instancia el unico modulo ya integrado (persistencia) y
-// deja en nullptr los punteros a las cinco estructuras de los companeros:
-// aqui solo existen sus declaraciones adelantadas (tipos incompletos) y
-// C++ no permite hacer new de un tipo cuyo tamano no se conoce, por lo que
-// cada uno se instanciara con new al momento de integrar su modulo. Al
-// final llama a cargarTodo() para reconstruir el estado desde los CSV
-// (o sembrar datos de ejemplo si es la primera ejecucion).
+// Constructor: instancia los modulos REALES ya integrados (las tres
+// estructuras de tareas -ArbolSubtareas, ColaTareas y ColaPrioridad- y la
+// persistencia) y deja en nullptr los punteros a los modulos que aun no
+// entregan los companeros (ListaUsuarios y PilaHistorial): para esos,
+// todavia solo existen sus declaraciones adelantadas (tipos incompletos) y
+// C++ no permite hacer new de un tipo cuyo tamano no se conoce. Al final
+// llama a cargarTodo() para reconstruir el estado desde los CSV (o sembrar
+// datos de ejemplo si es la primera ejecucion).
 // ---------------------------------------------------------------------
 GestorSistema::GestorSistema()
-    : listaUsuarios(nullptr),   // Pendiente: ListaUsuarios (Cesar).
-      historial(nullptr),       // Pendiente: PilaHistorial (modulo historial).
-      colaFIFO(nullptr),        // Pendiente: ColaTareas (Cris).
-      colaPrioridad(nullptr),   // Pendiente: ColaPrioridad (Cris).
-      arbolTareas(nullptr),     // Pendiente: ArbolSubtareas (Cris).
+    : listaUsuarios(nullptr),             // Pendiente: ListaUsuarios (Cesar).
+      historial(nullptr),                 // Pendiente: PilaHistorial (modulo historial).
+      colaFIFO(new ColaTareas()),         // Real: ColaTareas (Cris).
+      colaPrioridad(new ColaPrioridad()), // Real: ColaPrioridad (Cris).
+      arbolTareas(new ArbolSubtareas()),  // Real: ArbolSubtareas (Cris).
       persistencia(new GestorArchivosCSV()),
       usuarioActual(nullptr) {
     cargarTodo();
@@ -115,16 +120,56 @@ void GestorSistema::cargarTodo() {
         descripcionesSimuladas.push_back("Tarea de ejemplo del usuario normal");
     }
 
-    // TODO: cargar subtareas.csv aqui cuando ArbolSubtareas este integrado.
+    // --- Subtareas (reconstruye el bosque real de tareas) ---
+    // Formato de subtareas.csv: (id, idTareaPadre, descripcion, estado).
+    // Cada fila valida se convierte a una Tarea* y se inserta en el arbol
+    // real con agregarSubtarea(idTareaPadre, nueva). Un idTareaPadre = 0
+    // significa que es una tarea de nivel superior (hija de la raiz
+    // virtual). El CSV no trae prioridad ni responsable, por lo que las
+    // tareas se reconstruyen con valores neutros.
+    vector<vector<string>> filasSubtareas = persistencia->cargarSubtareas("subtareas.csv");
+
+    for (size_t i = 0; i < filasSubtareas.size(); ++i) {
+        const vector<string>& fila = filasSubtareas[i];
+        try {
+            int id = stoi(fila[0]);
+            int idPadre = stoi(fila[1]);
+            string descripcion = fila[2];
+            string estado = fila[3];
+
+            Tarea* nueva = new Tarea(id, "SIN_PRIORIDAD", estado, descripcion, -1);
+            if (!arbolTareas->agregarSubtarea(idPadre, nueva)) {
+                // El padre no existe en el arbol: la tarea no se inserta y
+                // el arbol no la tomo, asi que quien la creo con new debe
+                // liberarla aqui para no fugarla.
+                cout << "Aviso: fila de subtareas.csv con idTareaPadre "
+                     << "inexistente; se omite." << endl;
+                delete nueva;
+            }
+        } catch (const exception&) {
+            cout << "Aviso: fila de subtareas.csv con ID invalido; se omite." << endl;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------
 // Destructor: libera con delete cada puntero del cual la clase es duena.
-// persistencia es el unico recurso real por ahora. Los punteros a los
-// modulos pendientes de integracion valen nullptr y NO se liberan aqui:
-// hacer delete de un tipo incompleto (solo declarado adelante) es un
-// comportamiento indefinido. AL INTEGRAR cada modulo se debe: incluir su
-// .h, hacer new en el constructor y agregar su delete en este destructor.
+//
+// ORDEN DE ELIMINACION (evita acceder a memoria ya liberada):
+//   - Las colas (colaFIFO, colaPrioridad) solo administran sus NodoTarea y
+//     guardan una referencia PRESTADA a las Tarea; al destruirse liberan
+//     unicamente sus nodos y no tocan las Tarea.
+//   - arbolTareas es el DUEÑO de las Tarea de nivel superior (su destructor
+//     las libera recursivamente, junto con la raíz virtual). Por eso se
+//     destruyen primero las "observadoras" (las colas) y al final el
+//     "propietario" (el árbol): así ningún destructor queda con punteros a
+//     memoria que ya fue liberada.
+//   - persistencia es independiente de las anteriores.
+//
+// Los punteros a los modulos pendientes de integracion (historial y
+// listaUsuarios) siguen valiendo nullptr y NO se liberan aqui: hacer delete
+// de un tipo incompleto (solo declarado adelante) es un comportamiento
+// indefinido, y se activaran cuando cada companero integre su modulo.
 //
 // usuarioActual NO se libera: apunta a un nodo dentro de usuariosSimulados
 // (o, cuando se integre, dentro de listaUsuarios), y ese vector ya se
@@ -132,12 +177,16 @@ void GestorSistema::cargarTodo() {
 // una doble liberacion de memoria (undefined behavior).
 // ---------------------------------------------------------------------
 GestorSistema::~GestorSistema() {
-    delete persistencia;      // Unico modulo integrado por ahora.
+    // Primero las colas (solo nodos; referencias prestadas a las Tarea)...
+    delete colaFIFO;
+    delete colaPrioridad;
 
-    // Pendientes de integracion (nullptr; liberar al integrar cada modulo):
-    // delete arbolTareas;
-    // delete colaPrioridad;
-    // delete colaFIFO;
+    // ... y al final el árbol, propietario real de las Tarea.
+    delete arbolTareas;
+
+    delete persistencia;  // Independiente de las estructuras de tareas.
+
+    // Pendientes de integracion (siguen en nullptr; liberar al integrar):
     // delete historial;
     // delete listaUsuarios;
 
@@ -297,29 +346,29 @@ Usuario* GestorSistema::buscarUsuario(int id) {
 
 // =====================================================================
 //                       GESTION DE TAREAS
-// (Pendiente de conectar con ColaTareas/ColaPrioridad; hoy usan la
-//  simulacion local, que ahora SI persiste correctamente)
+// (Ya conectada con las estructuras reales: ArbolSubtareas (dueño de las
+//  Tarea), ColaTareas y ColaPrioridad. Los vectores de simulacion se
+//  conservan temporalmente en la clase, pero este bloque ya no los usa;
+//  se eliminaran por completo cuando todos los metodos esten migrados.)
 // =====================================================================
 
 void GestorSistema::agregarTarea(int id, const std::string& prioridad, int idResponsable, const std::string& descripcion) {
-    cout << "  [Pendiente de conectar con ColaTareas] usando simulacion local." << endl;
-
-    for (size_t i = 0; i < idsTareasSimuladas.size(); ++i) {
-        if (idsTareasSimuladas[i] == id) {
-            cout << "Error: ya existe una tarea con el ID " << id << "." << endl;
-            return;                          // Sin duplicados.
-        }
+    if (arbolTareas->buscar(id) != nullptr) {
+        cout << "Error: ya existe una tarea con el ID " << id << "." << endl;
+        return;                          // Sin duplicados.
     }
     if (descripcion.empty()) {
         cout << "Error: la descripcion no puede estar vacia." << endl;
         return;
     }
 
-    idsTareasSimuladas.push_back(id);
-    prioridadesSimuladas.push_back(prioridad);
-    responsablesSimulados.push_back(idResponsable);
-    estadosSimuladas.push_back("Pendiente");
-    descripcionesSimuladas.push_back(descripcion);
+    // Crea la Tarea real (el árbol es su DUEÑO y la liberará), la agrega
+    // como tarea de nivel superior y la encola en ambas colas, que guardan
+    // una referencia PRESTADA a la misma Tarea (no la liberan).
+    Tarea* tarea = new Tarea(id, prioridad, "Pendiente", descripcion, idResponsable);
+    arbolTareas->agregarTarea(tarea);
+    colaFIFO->encolar(tarea);
+    colaPrioridad->encolar(tarea);
 
     cout << "Tarea ID " << id << " agregada correctamente." << endl;
 
@@ -351,42 +400,34 @@ void GestorSistema::actualizarTarea(int id, const std::string& descripcion) {
 }
 
 void GestorSistema::eliminarTarea(int id) {
-    cout << "  [Pendiente de conectar con ColaTareas] usando simulacion local." << endl;
-
-    for (size_t i = 0; i < idsTareasSimuladas.size(); ++i) {
-        if (idsTareasSimuladas[i] == id) {
-            idsTareasSimuladas.erase(idsTareasSimuladas.begin() + i);
-            prioridadesSimuladas.erase(prioridadesSimuladas.begin() + i);
-            responsablesSimulados.erase(responsablesSimulados.begin() + i);
-            estadosSimuladas.erase(estadosSimuladas.begin() + i);
-            descripcionesSimuladas.erase(descripcionesSimuladas.begin() + i);
-
-            cout << "Tarea ID " << id << " eliminada correctamente." << endl;
-
-            guardarTodo();
-            string idAud = (usuarioActual != nullptr) ? to_string(usuarioActual->getId()) : "-1";
-            persistencia->registrarAuditoria(idAud, "eliminarTarea", to_string(id));
-            return;
-        }
+    if (!arbolTareas->eliminar(id)) {
+        cout << "No se encontro una tarea con el ID " << id << "." << endl;
+        return;
     }
 
-    cout << "No se encontro una tarea con el ID " << id << "." << endl;
+    cout << "Tarea ID " << id << " eliminada correctamente." << endl;
+
+    guardarTodo();
+    string idAud = (usuarioActual != nullptr) ? to_string(usuarioActual->getId()) : "-1";
+    persistencia->registrarAuditoria(idAud, "eliminarTarea", to_string(id));
 }
 
 void GestorSistema::listarTareasPendientes() {
-    cout << "  [Pendiente de conectar con ColaTareas] usando simulacion local." << endl;
-
     bool hayPendientes = false;
-    for (size_t i = 0; i < idsTareasSimuladas.size(); ++i) {
-        if (estadosSimuladas[i] != "Completada") {
-            cout << "  ID " << idsTareasSimuladas[i]
-                 << " | Prioridad: " << prioridadesSimuladas[i]
-                 << " | Responsable: " << responsablesSimulados[i]
-                 << " | Estado: " << estadosSimuladas[i]
-                 << " | " << descripcionesSimuladas[i] << endl;
+
+    // Recorre el bosque real con el nuevo recorrido de filtrado de
+    // ArbolSubtareas y muestra solo las tareas cuyo estado no sea
+    // "Completada", con el mismo formato que usaba la version simulada.
+    arbolTareas->recorrerConFiltro(
+        [](Tarea* tarea) { return tarea->getEstado() != "Completada"; },
+        [&](Tarea* tarea) {
+            cout << "  ID " << tarea->getId()
+                 << " | Prioridad: " << tarea->getPrioridad()
+                 << " | Responsable: " << tarea->getIdUsuarioResponsable()
+                 << " | Estado: " << tarea->getEstado()
+                 << " | " << tarea->getDescripcion() << endl;
             hayPendientes = true;
-        }
-    }
+        });
 
     if (!hayPendientes) {
         cout << "No hay tareas pendientes." << endl;
@@ -394,20 +435,17 @@ void GestorSistema::listarTareasPendientes() {
 }
 
 void GestorSistema::buscarTarea(int id) {
-    cout << "  [Pendiente de conectar con ColaTareas] usando simulacion local." << endl;
-
-    for (size_t i = 0; i < idsTareasSimuladas.size(); ++i) {
-        if (idsTareasSimuladas[i] == id) {
-            cout << "Tarea ID " << id
-                 << " | Prioridad: " << prioridadesSimuladas[i]
-                 << " | Responsable: " << responsablesSimulados[i]
-                 << " | Estado: " << estadosSimuladas[i]
-                 << " | " << descripcionesSimuladas[i] << endl;
-            return;
-        }
+    Tarea* tarea = arbolTareas->buscar(id);
+    if (tarea == nullptr) {
+        cout << "No se encontro una tarea con el ID " << id << "." << endl;
+        return;
     }
 
-    cout << "No se encontro una tarea con el ID " << id << "." << endl;
+    cout << "Tarea ID " << tarea->getId()
+         << " | Prioridad: " << tarea->getPrioridad()
+         << " | Responsable: " << tarea->getIdUsuarioResponsable()
+         << " | Estado: " << tarea->getEstado()
+         << " | " << tarea->getDescripcion() << endl;
 }
 
 // ---------------------------------------------------------------------
@@ -417,29 +455,20 @@ void GestorSistema::buscarTarea(int id) {
 // tarea. Un ADMINISTRADOR puede cambiar cualquier estado.
 // ---------------------------------------------------------------------
 bool GestorSistema::cambiarEstadoTarea(int idTarea, int idUsuario, const std::string& nuevoEstado) {
-    cout << "  [Pendiente de conectar con ColaTareas] usando simulacion local." << endl;
-
     if (usuarioActual == nullptr) {
         cout << "Error: no hay una sesion activa para cambiar estados." << endl;
         return false;
     }
 
-    long indice = -1;
-    for (size_t i = 0; i < idsTareasSimuladas.size(); ++i) {
-        if (idsTareasSimuladas[i] == idTarea) {
-            indice = static_cast<long>(i);
-            break;
-        }
-    }
-
-    if (indice == -1) {
+    Tarea* tarea = arbolTareas->buscar(idTarea);
+    if (tarea == nullptr) {
         cout << "No se encontro una tarea con el ID " << idTarea << "." << endl;
         return false;
     }
 
     // Validacion de rol para usuarios normales.
     if (usuarioActual->getRol() == Rol::USUARIO_NORMAL) {
-        if (responsablesSimulados[indice] != idUsuario) {
+        if (tarea->getIdUsuarioResponsable() != idUsuario) {
             cout << "Error: un usuario normal solo puede cambiar el estado de las "
                     "tareas que le fueron asignadas." << endl;
             return false;
@@ -447,7 +476,7 @@ bool GestorSistema::cambiarEstadoTarea(int idTarea, int idUsuario, const std::st
         cout << "Permiso validado: la tarea esta asignada al usuario " << idUsuario << "." << endl;
     }
 
-    estadosSimuladas[indice] = nuevoEstado;
+    tarea->setEstado(nuevoEstado);
     cout << "Estado de la tarea " << idTarea << " cambiado a '" << nuevoEstado << "'." << endl;
 
     guardarTodo();
@@ -461,14 +490,63 @@ bool GestorSistema::cambiarEstadoTarea(int idTarea, int idUsuario, const std::st
 // =====================================================================
 
 // ---------------------------------------------------------------------
+// aplanarArbolParaGuardar: recorre el bosque real de tareas excluyendo la
+// raíz virtual y arma una fila por cada tarea con el formato que espera
+// subtareas.csv: (id, idTareaPadre, descripcion, estado).
+//
+// El recorrido es pre-orden, así que cada tarea queda escrita ANTES que sus
+// subtareas, lo cual permite reconstruir el árbol al cargar sin depender
+// del orden en el archivo. Las tareas de nivel superior llevan idTareaPadre
+// = 0 (el id de la raíz virtual), que es justo lo que espera
+// arbolTareas->agregarSubtarea() para volver a insertarlas como hijas
+// directas de la raíz virtual.
+// ---------------------------------------------------------------------
+vector<vector<string>> GestorSistema::aplanarArbolParaGuardar() {
+    vector<vector<string>> filas;
+
+    Tarea* raizVirtual = arbolTareas->getRaiz();
+    if (raizVirtual == nullptr) {
+        return filas;
+    }
+
+    // Visitante recursivo: empuja la fila del nodo actual (con su padre) y
+    // luego recorre sus subtareas. Se usa std::function para poder
+    // llamarse a sí mismo.
+    function<void(Tarea*, Tarea*)> visitar = [&](Tarea* padre, Tarea* nodo) {
+        if (nodo == nullptr) {
+            return;
+        }
+
+        vector<string> fila;
+        fila.push_back(to_string(nodo->getId()));
+        fila.push_back(to_string(padre->getId()));
+        fila.push_back(nodo->getDescripcion());
+        fila.push_back(nodo->getEstado());
+        filas.push_back(fila);
+
+        vector<Tarea*> subtareas = nodo->getSubtareas();
+        for (Tarea* subtarea : subtareas) {
+            visitar(nodo, subtarea);
+        }
+    };
+
+    // Arranca desde cada hijo de la raíz virtual: la propia raíz virtual
+    // (id 0) NO se escribe como fila.
+    vector<Tarea*> nivelSuperior = raizVirtual->getSubtareas();
+    for (Tarea* tarea : nivelSuperior) {
+        visitar(raizVirtual, tarea);
+    }
+
+    return filas;
+}
+
+// ---------------------------------------------------------------------
 // guardarTodo: guarda el estado actual en los CSV (lo llama CLI como
 // gestor.guardarTodo()).
 //
-// CORREGIDO: ya NO se llama a guardarSubtareas con un vector vacio en
-// cada guardado. Eso borraba subtareas.csv cada vez que se agregaba o
-// modificaba cualquier usuario o tarea. Se reactivara cuando
-// ArbolSubtareas este integrado y haya un vector real de subtareas que
-// guardar.
+// Usuarios y tareas se escriben desde los vectores de simulacion todavia
+// usados por los modulos pendientes; las subtareas se aplanan desde el
+// arbol real (ArbolSubtareas), que ya es quien posee las tareas.
 // ---------------------------------------------------------------------
 void GestorSistema::guardarTodo() {
     cout << "Guardando cambios en los archivos CSV..." << endl;
@@ -499,11 +577,10 @@ void GestorSistema::guardarTodo() {
     }
     persistencia->guardarTareas("tareas.csv", filasTareas);
 
-    // TODO: activar cuando ArbolSubtareas este integrado y se tenga el
-    // vector real de subtareas a guardar. Mientras tanto, NO se llama a
-    // guardarSubtareas() para no sobrescribir subtareas.csv con datos
-    // vacios en cada guardado.
-    // persistencia->guardarSubtareas("subtareas.csv", filasSubtareas);
+    // Subtareas: columnas (id, idTareaPadre, descripcion, estado) segun
+    // guardarSubtareas, generadas aplanando el arbol real de tareas.
+    vector<vector<string>> filasSubtareas = aplanarArbolParaGuardar();
+    persistencia->guardarSubtareas("subtareas.csv", filasSubtareas);
 
     cout << "Cambios guardados correctamente." << endl;
 }

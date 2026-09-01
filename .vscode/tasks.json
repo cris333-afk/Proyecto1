@@ -3,15 +3,31 @@
     "tasks": [
         {
             "type": "shell",
-            "label": "C/C++: Compilar main.cpp",
+            "label": "Compilar proyecto completo",
             "command": "g++",
             "args": [
+                "-std=c++17",
                 "-Wall",
                 "-Wextra",
                 "-g3",
-                "${file}",
+                "main.cpp",
+                "Accion.cpp",
+                "ArbolSubtareas.cpp",
+                "Autenticacion.cpp",
+                "CLI.cpp",
+                "ColaPrioridad.cpp",
+                "ColaTareas.cpp",
+                "GestorArchivosCSV.cpp",
+                "GestorSistema.cpp",
+                "ListaUsuarios.cpp",
+                "NodoTarea.cpp",
+                "Ordenador.cpp",
+                "PilaHistorial.cpp",
+                "Tarea.cpp",
+                "Usuario.cpp",
+                "ValidacionEntrada.cpp",
                 "-o",
-                "${fileDirname}\\output\\main.exe"
+                "output/main"
             ],
             "options": {
                 "cwd": "${fileDirname}"

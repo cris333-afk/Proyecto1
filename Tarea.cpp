@@ -1,10 +1,13 @@
 #include "Tarea.h"
 
 // Constructor
-Tarea::Tarea(int id, const string& prioridad, const string& estado) {
+Tarea::Tarea(int id, const string& prioridad, const string& estado,
+             const string& descripcion, int idUsuarioResponsable) {
     this->id = id;
     this->prioridad = prioridad;
     this->estado = estado;
+    this->descripcion = descripcion;
+    this->idUsuarioResponsable = idUsuarioResponsable;
 }
 
 // Destructor
@@ -28,6 +31,14 @@ string Tarea::getEstado() const {
     return estado;
 }
 
+std::string Tarea::getDescripcion() const {
+    return descripcion;
+}
+
+int Tarea::getIdUsuarioResponsable() const {
+    return idUsuarioResponsable;
+}
+
 vector<Tarea*> Tarea::getSubtareas() const {
     return subtareas;
 }
@@ -43,6 +54,14 @@ void Tarea::setPrioridad(const string& prioridad) {
 
 void Tarea::setEstado(const string& estado) {
     this->estado = estado;
+}
+
+void Tarea::setDescripcion(const std::string& descripcion) {
+    this->descripcion = descripcion;
+}
+
+void Tarea::setIdUsuarioResponsable(int idUsuarioResponsable) {
+    this->idUsuarioResponsable = idUsuarioResponsable;
 }
 
 void Tarea::setSubtareas(const vector<Tarea*>& subtareas) {

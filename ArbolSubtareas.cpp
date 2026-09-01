@@ -3,18 +3,25 @@
 
 using namespace std;
 
-// Constructor por defecto: árbol vacío
+// Constructor por defecto: crea automáticamente la raíz virtual (id = 0).
+// Esta Tarea es invisible para quien usa el árbol; sus hijos directos son
+// las tareas reales de nivel superior del bosque.
 ArbolSubtareas::ArbolSubtareas() {
-    raiz = nullptr;
+    raiz = new Tarea(0, "SIN_PRIORIDAD", "SIN_ESTADO");
 }
 
-// Constructor con raíz inicial
+// Constructor con tarea inicial: la tarea indicada se convierte en la
+// primera tarea de nivel superior (hija de la raíz virtual).
 ArbolSubtareas::ArbolSubtareas(Tarea* raiz) {
-    this->raiz = raiz;
+    this->raiz = new Tarea(0, "SIN_PRIORIDAD", "SIN_ESTADO");
+    if (raiz != nullptr) {
+        agregarTarea(raiz);
+    }
 }
 
-// Destructor: libera toda la memoria del árbol.
-// delete raiz invoca el destructor de Tarea, que borra recursivamente todas sus subtareas.
+// Destructor: libera toda la memoria del bosque.
+// delete raiz libera la raíz virtual, cuyo destructor de Tarea borra
+// recursivamente a sus hijos (las tareas reales de nivel superior).
 ArbolSubtareas::~ArbolSubtareas() {
     delete raiz;
 }
@@ -27,6 +34,18 @@ Tarea* ArbolSubtareas::getRaiz() const {
 // Setter de la raíz
 void ArbolSubtareas::setRaiz(Tarea* raiz) {
     this->raiz = raiz;
+}
+
+// Agrega una tarea directamente como hija de la raíz virtual, es decir,
+// como una tarea real de nivel superior, sin pedir idPadre.
+bool ArbolSubtareas::agregarTarea(Tarea* nueva) {
+    if (nueva == nullptr) {
+        return false;
+    }
+    vector<Tarea*> hijos = raiz->getSubtareas();
+    hijos.push_back(nueva);
+    raiz->setSubtareas(hijos);
+    return true;
 }
 
 // Recursión: recorre cada nodo buscando el idPadre.
@@ -81,8 +100,12 @@ Tarea* ArbolSubtareas::buscarRec(Tarea* nodo, int id) {
     return nullptr;
 }
 
-// Busca una tarea por id, devuelve nullptr si no existe
+// Busca una tarea por id, devuelve nullptr si no existe.
+// El id 0 es el de la raíz virtual: nunca se busca ni se devuelve.
 Tarea* ArbolSubtareas::buscar(int id) {
+    if (id == 0 || raiz == nullptr) {
+        return nullptr;
+    }
     return buscarRec(raiz, id);
 }
 
@@ -120,19 +143,16 @@ bool ArbolSubtareas::eliminarRec(Tarea* padre, int id) {
     return false;
 }
 
-// Elimina la tarea con el id indicado (junto con sus descendientes)
+// Elimina la tarea con el id indicado (junto con sus descendientes).
+// La raíz virtual (id 0) no puede eliminarse: se destruye solo al borrar
+// el bosque completo.
 bool ArbolSubtareas::eliminar(int id) {
-    if (raiz == nullptr) {
+    if (id == 0 || raiz == nullptr) {
         return false;
     }
 
-    // Si la raíz es la que se elimina, se borra todo el árbol
-    if (raiz->getId() == id) {
-        delete raiz;  // El destructor de Tarea borra recursivamente las subtareas
-        raiz = nullptr;
-        return true;
-    }
-
+    // eliminarRec busca a partir de la raíz virtual y elimina el primer
+    // nodo real con ese id (ya sea de nivel superior o una subtarea).
     return eliminarRec(raiz, id);
 }
 
@@ -154,13 +174,24 @@ void ArbolSubtareas::recorrerPreOrdenRec(Tarea* nodo) {
     }
 }
 
-// Recorrido pre-orden del árbol
+// Recorrido pre-orden del bosque.
+// Se recorren los hijos directos de la raíz virtual (las tareas de nivel
+// superior); la propia raíz virtual (id 0) nunca se imprime.
 void ArbolSubtareas::recorrerPreOrden() {
     if (raiz == nullptr) {
         cout << "El árbol está vacío." << endl;
         return;
     }
-    recorrerPreOrdenRec(raiz);
+
+    vector<Tarea*> hijos = raiz->getSubtareas();
+    if (hijos.empty()) {
+        cout << "El árbol está vacío." << endl;
+        return;
+    }
+
+    for (Tarea* hijo : hijos) {
+        recorrerPreOrdenRec(hijo);
+    }
 }
 
 // Recursión: primero recorre cada hijo en post-orden, luego imprime el nodo actual.
@@ -181,13 +212,57 @@ void ArbolSubtareas::recorrerPostOrdenRec(Tarea* nodo) {
          << " | Estado: " << nodo->getEstado() << endl;
 }
 
-// Recorrido post-orden del árbol
+// Recorrido post-orden del bosque.
+// Se recorren los hijos directos de la raíz virtual (las tareas de nivel
+// superior); la propia raíz virtual (id 0) nunca se imprime.
 void ArbolSubtareas::recorrerPostOrden() {
     if (raiz == nullptr) {
         cout << "El árbol está vacío." << endl;
         return;
     }
-    recorrerPostOrdenRec(raiz);
+
+    vector<Tarea*> hijos = raiz->getSubtareas();
+    if (hijos.empty()) {
+        cout << "El árbol está vacío." << endl;
+        return;
+    }
+
+    for (Tarea* hijo : hijos) {
+        recorrerPostOrdenRec(hijo);
+    }
+}
+
+// Recorrido de filtrado del bosque.
+// Recorre todas las tareas reales (excluye la raíz virtual) y, por cada
+// una que cumpla el predicado "filtro", ejecuta "accion" con esa Tarea*.
+// Es un recorrido nuevo y genérico que no altera los recorridos de
+// impresión existentes (pre-orden/post-orden).
+void ArbolSubtareas::recorrerConFiltro(const std::function<bool(Tarea*)>& filtro,
+                                       const std::function<void(Tarea*)>& accion) {
+    if (raiz == nullptr) {
+        return;
+    }
+
+    // Función recursiva local que visita un subárbol. Se declara como
+    // std::function para poder llamarse a sí misma.
+    std::function<void(Tarea*)> visitar = [&](Tarea* nodo) {
+        if (nodo == nullptr) {
+            return;
+        }
+        if (filtro(nodo)) {
+            accion(nodo);
+        }
+        vector<Tarea*> hijos = nodo->getSubtareas();
+        for (Tarea* hijo : hijos) {
+            visitar(hijo);
+        }
+    };
+
+    // Arranca desde cada hijo de la raíz virtual: no se visita la raíz virtual.
+    vector<Tarea*> hijos = raiz->getSubtareas();
+    for (Tarea* hijo : hijos) {
+        visitar(hijo);
+    }
 }
 
 // Recursión: cuenta el nodo actual (1) más la suma de los nodos de cada hijo.
@@ -205,9 +280,20 @@ int ArbolSubtareas::contarNodosRec(Tarea* nodo) {
     return total;
 }
 
-// Devuelve el número total de nodos del árbol
+// Devuelve el número de tareas reales del bosque.
+// Se cuentan los subárboles de cada hijo de la raíz virtual, sin incluir
+// a la propia raíz virtual (id 0).
 int ArbolSubtareas::contarNodos() {
-    return contarNodosRec(raiz);
+    if (raiz == nullptr) {
+        return 0;
+    }
+
+    int total = 0;
+    vector<Tarea*> hijos = raiz->getSubtareas();
+    for (Tarea* hijo : hijos) {
+        total += contarNodosRec(hijo);
+    }
+    return total;
 }
 
 // Recursión: altura = 1 + la mayor altura entre los hijos.
@@ -228,7 +314,13 @@ int ArbolSubtareas::alturaRec(Tarea* nodo) {
     return alturaMax + 1;
 }
 
-// Devuelve la altura del árbol (-1 si está vacío)
+// Devuelve la altura real del bosque (-1 si no hay tareas).
+// alturaRec cuenta también el nivel de la raíz virtual, así que se descuenta
+// 1: con una sola tarea de nivel superior la altura es 0, igual que un árbol
+// clásico con una única raíz real.
 int ArbolSubtareas::altura() {
-    return alturaRec(raiz);
+    if (raiz == nullptr) {
+        return -1;
+    }
+    return alturaRec(raiz) - 1;
 }

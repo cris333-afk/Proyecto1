@@ -25,7 +25,9 @@
 #include <functional>
 #include <cassert>
 
-#include "Autenticacion.h"
+#include "../Usuario.h"
+#include "../ListaUsuarios.h"
+#include "../Autenticacion.h"
 
 using namespace std;
 

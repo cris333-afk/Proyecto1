@@ -2,12 +2,13 @@
 
 // Constructor
 Tarea::Tarea(int id, const string& prioridad, const string& estado,
-             const string& descripcion, int idUsuarioResponsable) {
+             const string& descripcion, int idUsuarioResponsable, int ciclosEspera) {
     this->id = id;
     this->prioridad = prioridad;
     this->estado = estado;
     this->descripcion = descripcion;
     this->idUsuarioResponsable = idUsuarioResponsable;
+    this->ciclosEspera = ciclosEspera;
 }
 
 // Destructor
@@ -39,6 +40,10 @@ int Tarea::getIdUsuarioResponsable() const {
     return idUsuarioResponsable;
 }
 
+int Tarea::getCiclosEspera() const {
+    return ciclosEspera;
+}
+
 vector<Tarea*> Tarea::getSubtareas() const {
     return subtareas;
 }
@@ -62,6 +67,18 @@ void Tarea::setDescripcion(const std::string& descripcion) {
 
 void Tarea::setIdUsuarioResponsable(int idUsuarioResponsable) {
     this->idUsuarioResponsable = idUsuarioResponsable;
+}
+
+void Tarea::setCiclosEspera(int ciclos) {
+    this->ciclosEspera = ciclos;
+}
+
+void Tarea::incrementarCiclosEspera() {
+    this->ciclosEspera++;
+}
+
+void Tarea::resetCiclosEspera() {
+    this->ciclosEspera = 0;
 }
 
 void Tarea::setSubtareas(const vector<Tarea*>& subtareas) {

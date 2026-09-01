@@ -5,3 +5,7 @@
 *.exe
 *.o
 *.log
+workflow_manager
+test_auth
+test_ord
+test/test_pruebas
